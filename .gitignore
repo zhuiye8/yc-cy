@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+demo/node_modules/
+
+# local build and logs
+dist/
+demo/dist/
+*.log
+demo/server.*.log
+
+# source design files from client prototypes
+首页二级页/
+*.psd
+*.psb
+demo/assets/references/
+demo/screenshots/
+
+# local PSD extraction tools and non-runtime exports
+tools/
+demo/assets/extracted/*
+!demo/assets/extracted/ai_chat_reference.jpg
+!demo/assets/extracted/ai_hero_bg.jpg
+!demo/assets/extracted/ai_logo.png
+!demo/assets/extracted/brand_logo.png
+!demo/assets/extracted/home_card_clean.png
+!demo/assets/extracted/home_intro_photo.jpg
+!demo/assets/extracted/home_partner_*.png
+!demo/assets/extracted/query_hero_bg.jpg
+!demo/assets/extracted/query_icon_*.png
+!demo/assets/extracted/query_main_clean.png
+!demo/assets/extracted/query_side_logo.png
+!demo/assets/extracted/query_sidebar_line.jpg
+!demo/assets/extracted/query_top_logo.png
+!demo/assets/extracted/首页1_图层_1.png
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
