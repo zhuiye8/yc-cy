@@ -38,3 +38,6 @@ demo/assets/extracted/*
 Thumbs.db
 .vscode/
 .idea/
+
+# local git repair backup (corrupt packfile salvage)
+.git-backup-broken-pack/
