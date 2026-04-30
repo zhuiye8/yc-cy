@@ -2,7 +2,6 @@ import { createApp } from 'vue'
 import ChainApp from './ChainApp.vue'
 import SpaceApp from './SpaceApp.vue'
 
-const TOPBAR_HEIGHT = 108
 const SCROLL_LOCK_TARGET_IDS = ['chainView', 'spaceView']
 
 // ── 全局 body 滚动锁：进入 chainView/spaceView 时阻止整页滚动，
@@ -43,7 +42,6 @@ function mountOverlay(targetViewId, AppComponent, hidePlaceholderSelector) {
   overlay.dataset.target = targetViewId
   Object.assign(overlay.style, {
     position: 'fixed',
-    top: `${TOPBAR_HEIGHT}px`,
     left: '0',
     right: '0',
     bottom: '0',
@@ -55,10 +53,17 @@ function mountOverlay(targetViewId, AppComponent, hidePlaceholderSelector) {
   document.body.appendChild(overlay)
 
   let app = null
+  let resizeHandler = null
   const placeholders = hidePlaceholderSelector
     ? Array.from(targetView.querySelectorAll(hidePlaceholderSelector))
     : []
   const placeholderOriginalDisplay = new WeakMap()
+
+  const syncOverlayBounds = () => {
+    const topbar = targetView.querySelector('.query-topbar')
+    const top = topbar?.getBoundingClientRect().height || 108
+    overlay.style.top = `${Math.round(top)}px`
+  }
 
   const hidePlaceholders = () => {
     placeholders.forEach((el) => {
@@ -77,6 +82,7 @@ function mountOverlay(targetViewId, AppComponent, hidePlaceholderSelector) {
   }
 
   const activate = () => {
+    syncOverlayBounds()
     overlay.style.display = 'block'
     hidePlaceholders()
     if (!app) {
@@ -111,6 +117,12 @@ function mountOverlay(targetViewId, AppComponent, hidePlaceholderSelector) {
 
   const observer = new MutationObserver(sync)
   observer.observe(targetView, { attributes: true, attributeFilter: ['class'] })
+  resizeHandler = () => {
+    if (targetView.classList.contains('is-active')) {
+      syncOverlayBounds()
+    }
+  }
+  window.addEventListener('resize', resizeHandler)
 }
 
 mountOverlay('chainView', ChainApp, '.chain-scene')

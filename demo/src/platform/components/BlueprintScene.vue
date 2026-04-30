@@ -1,6 +1,14 @@
 <template>
   <div class="blueprint-root">
     <div ref="stageRef" class="blueprint-stage"></div>
+    <div
+      v-if="labelTooltip.visible"
+      class="blueprint-node-tooltip"
+      :style="{ left: `${labelTooltip.x}px`, top: `${labelTooltip.y}px`, '--accent': labelTooltip.accent }"
+    >
+      <span>{{ labelTooltip.level }}</span>
+      <strong>{{ labelTooltip.title }}</strong>
+    </div>
 
     <!-- 左上：产业链快速切换面板 -->
     <nav class="blueprint-sector-menu" aria-label="产业链切换">
@@ -51,7 +59,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import {
@@ -70,6 +78,15 @@ const emit = defineEmits(['exit'])
 const stageRef = ref(null)
 const statusTitle = ref('总览')
 const statusBody = ref('点击任意漂浮产业扇区。镜头会推近，核心脉冲触发，主链节点依次生长，分支节点随后展开。')
+
+const labelTooltip = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  title: '',
+  level: '',
+  accent: '#86e4ff'
+})
 
 let resetSceneFn = () => {}
 const onReset = () => resetSceneFn()
@@ -203,27 +220,66 @@ onMounted(() => {
   let activeChain = null
   let rafId = null
 
-  function makeLabelSprite(text, color, scale = 1) {
+  function shortenLabel(text, maxLength = 12) {
+    const chars = Array.from(String(text || '').trim())
+    if (chars.length <= maxLength) return chars.join('')
+    return `${chars.slice(0, Math.max(2, maxLength - 3)).join('')}...`
+  }
+
+  function colorToCss(color, alpha = 1) {
+    return `rgba(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)}, ${alpha})`
+  }
+
+  function drawRoundRect(ctx, x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2)
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.lineTo(x + width - r, y)
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r)
+    ctx.lineTo(x + width, y + height - r)
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height)
+    ctx.lineTo(x + r, y + height)
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r)
+    ctx.lineTo(x, y + r)
+    ctx.quadraticCurveTo(x, y, x + r, y)
+    ctx.closePath()
+  }
+
+  function makeLabelSprite(text, color, scale = 1, options = {}) {
+    const shortText = shortenLabel(text, options.maxLength ?? 12)
     const canvas = document.createElement('canvas')
-    canvas.width = 420
+    const fontSize = options.fontSize ?? 42
+    const font = `700 ${fontSize}px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif`
+    const measure = document.createElement('canvas').getContext('2d')
+    measure.font = font
+    const textWidth = Math.ceil(measure.measureText(shortText).width)
+    canvas.width = Math.max(260, Math.min(720, textWidth + 92))
     canvas.height = 132
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, canvas.width, canvas.height)
+    drawRoundRect(ctx, 16, 31, canvas.width - 32, 70, 22)
+    ctx.fillStyle = 'rgba(9, 19, 36, 0.52)'
+    ctx.fill()
+    ctx.lineWidth = 2
+    ctx.strokeStyle = colorToCss(color, 0.34)
+    ctx.stroke()
     ctx.shadowBlur = 24
-    ctx.shadowColor = `rgba(${color.r * 255}, ${color.g * 255}, ${color.b * 255}, 0.42)`
+    ctx.shadowColor = colorToCss(color, 0.42)
     ctx.lineWidth = 8
     ctx.strokeStyle = 'rgba(10, 22, 38, 0.45)'
     ctx.fillStyle = 'rgba(236, 246, 255, 0.98)'
-    ctx.font = '600 42px "Segoe UI", "PingFang SC", sans-serif'
+    ctx.font = font
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.strokeText(text, canvas.width / 2, canvas.height / 2 + 2)
-    ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 2)
+    ctx.strokeText(shortText, canvas.width / 2, canvas.height / 2 + 2)
+    ctx.fillText(shortText, canvas.width / 2, canvas.height / 2 + 2)
     const texture = new THREE.CanvasTexture(canvas)
     texture.colorSpace = THREE.SRGBColorSpace
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, opacity: 0 })
     const sprite = new THREE.Sprite(material)
-    sprite.scale.set(3.5 * scale, 0.82 * scale, 1)
+    sprite.scale.set((canvas.width / 120) * scale, 0.82 * scale, 1)
+    sprite.userData.fullLabel = String(text || '')
+    sprite.userData.shortLabel = shortText
     return sprite
   }
 
@@ -306,6 +362,9 @@ onMounted(() => {
     group.userData.orbitAngle = Math.atan2(orbitOffset.z, orbitOffset.x)
     group.userData.orbitYOffset = basePosition.y
     group.userData.data = data
+    group.userData.fullLabel = data.name
+    group.userData.labelLevel = '产业'
+    group.userData.labelColor = data.color
     group.userData.state = { opacity: 1, glow: 0.8, ring: 0.3 }
 
     const shell = new THREE.Mesh(
@@ -344,8 +403,9 @@ onMounted(() => {
       new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
     )
     hit.userData.owner = group
+    hit.userData.labelOwner = group
 
-    const label = makeLabelSprite(data.name, data.color, 1)
+    const label = makeLabelSprite(data.name, data.color, 1, { maxLength: 8 })
     label.position.set(0, 2.58, 0)
 
     group.add(spindle, halo, shell, hit, label)
@@ -399,7 +459,7 @@ onMounted(() => {
   const tunnel = createGridTunnel()
   sectorData.forEach(createSectorNode)
 
-  function createNode(label, color, scale = 0.42) {
+  function createNode(label, color, scale = 0.42, options = {}) {
     const group = new THREE.Group()
     const state = { opacity: 0, glow: 0, scale: 0.1 }
     const core = new THREE.Mesh(
@@ -425,11 +485,24 @@ onMounted(() => {
       })
     )
     ring.rotation.x = Math.PI * 0.5
-    const labelSprite = makeLabelSprite(label, color, 0.65)
+    const labelSprite = makeLabelSprite(label, color, 0.65, {
+      maxLength: options.maxLength ?? 12,
+      fontSize: options.fontSize ?? 40
+    })
     labelSprite.position.set(0, scale * 2.3, 0)
     group.add(ring, core, labelSprite)
     group.scale.setScalar(state.scale)
-    group.userData = { state, core, ring, label: labelSprite }
+    group.userData = {
+      state,
+      core,
+      ring,
+      label: labelSprite,
+      fullLabel: String(label || ''),
+      shortLabel: labelSprite.userData.shortLabel,
+      labelLevel: options.levelLabel || '节点',
+      labelColor: color
+    }
+    core.userData.labelOwner = group
     setObjectOpacity(group, 0)
     return group
   }
@@ -469,6 +542,7 @@ onMounted(() => {
   }
 
   function clearChain() {
+    hideLabelTooltip()
     if (activeChain) {
       activeChain.nodes.forEach((node) => {
         bloomEffect.selection.delete(node.userData.core)
@@ -530,7 +604,10 @@ onMounted(() => {
     bloomEffect.selection.add(centerOrb)
 
     const nodes = data.chain.main.map((label, index) => {
-      const node = createNode(label, data.color.clone().lerp(new THREE.Color(0xffffff), 0.2), 0.4 + index * 0.04)
+      const node = createNode(label, data.color.clone().lerp(new THREE.Color(0xffffff), 0.2), 0.4 + index * 0.04, {
+        maxLength: 8,
+        levelLabel: '主链'
+      })
       node.position.copy(mainPoints[index + 1])
       chainGroup.add(node)
       return node
@@ -566,7 +643,10 @@ onMounted(() => {
         lineObject.head.visible = false
         chainGroup.add(lineObject.line)
         branchLines.push(lineObject)
-        const node = createNode(nodeData.name, data.color.clone().lerp(new THREE.Color('#8aa7ff'), 0.46), 0.28)
+        const node = createNode(nodeData.name, data.color.clone().lerp(new THREE.Color('#8aa7ff'), 0.46), 0.28, {
+          maxLength: 12,
+          levelLabel: '分支'
+        })
         node.position.copy(end)
         chainGroup.add(node)
         branchNodes.push(node)
@@ -717,7 +797,10 @@ onMounted(() => {
         }
         allLocalPositions.push(l1Pos.clone())
 
-        const node = createNode(data.name, color.clone(), scale)
+        const node = createNode(data.name, color.clone(), scale, {
+          maxLength: level <= 2 ? 12 : 10,
+          levelLabel: `L${level}`
+        })
         node.position.copy(pos)
         node.userData.nodeData = data
         node.userData.subtreeLevel = level
@@ -1127,6 +1210,7 @@ onMounted(() => {
   }
 
   function resetScene() {
+    hideLabelTooltip()
     if (currentTimeline) currentTimeline.kill()
     sceneState.busy = false
     sceneState.focusedSector = null
@@ -1194,23 +1278,79 @@ onMounted(() => {
     }
   }
 
+  function getLabelOwner(hit) {
+    return hit?.object?.userData?.labelOwner || hit?.object?.userData?.branchOwner || hit?.object?.userData?.owner || null
+  }
+
+  function getLabelHitAreas() {
+    const areas = [...sectorHitAreas, ...branchHitAreas]
+    if (!activeChain) return areas
+    activeChain.nodes?.forEach((node) => {
+      if (node.userData?.core) areas.push(node.userData.core)
+    })
+    activeChain.branchNodes?.forEach((node) => {
+      if (node.userData?.core) areas.push(node.userData.core)
+      ;(node.userData?.subtreeNodes || []).forEach((child) => {
+        if (child.userData?.core) areas.push(child.userData.core)
+      })
+    })
+    return areas
+  }
+
+  function getOwnerTitle(owner) {
+    return owner?.userData?.nodeData?.name || owner?.userData?.data?.name || owner?.userData?.fullLabel || ''
+  }
+
+  function getOwnerLevel(owner) {
+    if (!owner) return ''
+    if (owner.userData?.labelLevel) return owner.userData.labelLevel
+    if (owner.userData?.subtreeLevel) return `L${owner.userData.subtreeLevel}`
+    return '节点'
+  }
+
+  function showLabelTooltip(owner, event) {
+    const title = getOwnerTitle(owner)
+    if (!title) {
+      labelTooltip.visible = false
+      return
+    }
+    const rect = stage.getBoundingClientRect()
+    const color = owner.userData?.labelColor || owner.userData?.color || owner.userData?.data?.color
+    labelTooltip.visible = true
+    labelTooltip.x = Math.min(Math.max(event.clientX - rect.left + 18, 18), Math.max(18, rect.width - 360))
+    labelTooltip.y = Math.min(Math.max(event.clientY - rect.top + 18, 18), Math.max(18, rect.height - 112))
+    labelTooltip.title = title
+    labelTooltip.level = getOwnerLevel(owner)
+    labelTooltip.accent = color?.isColor ? colorToCss(color, 1) : '#86e4ff'
+  }
+
+  function hideLabelTooltip() {
+    labelTooltip.visible = false
+  }
+
   function onPointerMove(event) {
     const p = pointerToNDC(event)
     hoverTarget.x = p.x
     hoverTarget.y = p.y
-    // L1 分支节点上把光标改成 pointer，提示可点击
-    if (sceneState.focusedSector && !sceneState.busy && branchHitAreas.length) {
-      pointer.x = p.x
-      pointer.y = p.y
-      raycaster.setFromCamera(pointer, camera)
-      const hit = raycaster.intersectObjects(branchHitAreas, false)[0]
-      stage.style.cursor = hit ? 'pointer' : ''
-    } else if (stage.style.cursor === 'pointer') {
-      stage.style.cursor = ''
+    pointer.x = p.x
+    pointer.y = p.y
+    raycaster.setFromCamera(pointer, camera)
+
+    const hit = raycaster.intersectObjects(getLabelHitAreas(), false)[0]
+    const owner = getLabelOwner(hit)
+    if (owner) {
+      showLabelTooltip(owner, event)
+    } else {
+      hideLabelTooltip()
     }
+
+    const canClickBranch = sceneState.focusedSector && !sceneState.busy && hit?.object?.userData?.branchOwner
+    const canClickSector = !sceneState.focusedSector && hit?.object?.userData?.owner
+    stage.style.cursor = canClickBranch || canClickSector ? 'pointer' : ''
   }
 
   function onPointerDown(event) {
+    hideLabelTooltip()
     const p = pointerToNDC(event)
     pointer.x = p.x
     pointer.y = p.y
@@ -1397,6 +1537,50 @@ onBeforeUnmount(() => cleanup())
 
 .blueprint-stage :deep(canvas) {
   display: block;
+}
+
+.blueprint-node-tooltip {
+  position: absolute;
+  z-index: 12;
+  max-width: min(360px, calc(100% - 36px));
+  padding: 10px 13px 12px 15px;
+  border-radius: 14px;
+  border: 1px solid rgba(134, 228, 255, 0.42);
+  background: linear-gradient(135deg, rgba(8, 18, 33, 0.88), rgba(10, 35, 58, 0.72));
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32), 0 0 26px color-mix(in srgb, var(--accent) 34%, transparent);
+  backdrop-filter: blur(14px);
+  color: rgba(238, 248, 255, 0.98);
+  pointer-events: none;
+}
+
+.blueprint-node-tooltip::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 14px var(--accent);
+}
+
+.blueprint-node-tooltip span {
+  display: block;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  color: rgba(158, 210, 240, 0.82);
+}
+
+.blueprint-node-tooltip strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 15px;
+  line-height: 1.42;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-shadow: 0 0 12px rgba(134, 228, 255, 0.26);
 }
 
 .blueprint-hud {
