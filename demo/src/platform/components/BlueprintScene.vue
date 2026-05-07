@@ -91,14 +91,15 @@ const labelTooltip = reactive({
 let resetSceneFn = () => {}
 const onReset = () => resetSceneFn()
 
-// 左上角切换面板：6 个产业 dataKey + 名字 + 颜色（与下方 SECTOR_DEFS 保持一致）
+// 左上角切换面板：7 个产业大类（GICS Industry Group） dataKey + 名字 + 颜色（与下方 SECTOR_DEFS 保持一致）
 const sectorMenu = [
-  { name: '人工智能', dataKey: 'ai', colorHex: '#6ab6ff' },
-  { name: '新能源', dataKey: 'newenergy', colorHex: '#6bffcf' },
-  { name: '生物医药', dataKey: 'pharma', colorHex: '#86e4ff' },
-  { name: '酵母制造', dataKey: 'yeast', colorHex: '#9ca8ff' },
-  { name: '船舶制造', dataKey: 'ship', colorHex: '#8fd1ff' },
-  { name: '湿化学品', dataKey: 'wetchem', colorHex: '#7bfff2' },
+  { name: '材料',           dataKey: 'materials',    colorHex: '#b8aaff' },
+  { name: '资本货物',       dataKey: 'capitalgoods', colorHex: '#ffb066' },
+  { name: '汽车与零部件',   dataKey: 'auto',         colorHex: '#ff9bd1' },
+  { name: '医疗保健设备',   dataKey: 'medequip',     colorHex: '#6bffcf' },
+  { name: '制药与生物科技', dataKey: 'pharmabio',    colorHex: '#86e4ff' },
+  { name: '技术硬件与设备', dataKey: 'techhw',       colorHex: '#6ab6ff' },
+  { name: '半导体',         dataKey: 'semis',        colorHex: '#ffd980' },
 ]
 const activeSectorKey = ref(null)
 let selectSectorByKeyFn = () => {}
@@ -365,14 +366,14 @@ onMounted(() => {
     group.userData.fullLabel = data.name
     group.userData.labelLevel = '产业'
     group.userData.labelColor = data.color
-    group.userData.state = { opacity: 1, glow: 0.8, ring: 0.3 }
+    group.userData.state = { opacity: 1, glow: 0.5, ring: 0.3 }
 
     const shell = new THREE.Mesh(
       new THREE.IcosahedronGeometry(1.24, 4),
       new THREE.MeshStandardMaterial({
         color: data.color,
         emissive: data.color,
-        emissiveIntensity: 1.35,
+        emissiveIntensity: 0.81,
         metalness: 0.18,
         roughness: 0.22,
         transparent: true,
@@ -408,14 +409,15 @@ onMounted(() => {
     return group
   }
 
-  // 6 大产业的视觉配置（颜色、漂浮位置、对应数据 key）
+  // 7 大产业（GICS Industry Group）的视觉配置（颜色、漂浮位置、对应数据 key）
   const SECTOR_DEFS = [
-    { name: '人工智能', dataKey: 'ai',         color: new THREE.Color('#6ab6ff'), position: new THREE.Vector3(-6.8, 2.8, -1.6) },
-    { name: '新能源',   dataKey: 'newenergy',  color: new THREE.Color('#6bffcf'), position: new THREE.Vector3(-8.2, -1.4, -3.5) },
-    { name: '生物医药', dataKey: 'pharma',     color: new THREE.Color('#86e4ff'), position: new THREE.Vector3(-2.6, -3.2, 0.4) },
-    { name: '酵母制造', dataKey: 'yeast',      color: new THREE.Color('#9ca8ff'), position: new THREE.Vector3(5.8, 2.5, -3.8) },
-    { name: '船舶制造', dataKey: 'ship',       color: new THREE.Color('#8fd1ff'), position: new THREE.Vector3(7.9, -0.8, -1.2) },
-    { name: '湿化学品', dataKey: 'wetchem',    color: new THREE.Color('#7bfff2'), position: new THREE.Vector3(1.6, 4.3, 1.1) },
+    { name: '材料',           dataKey: 'materials',    color: new THREE.Color('#b8aaff'), position: new THREE.Vector3(-7.6,  2.6, -1.6) },
+    { name: '资本货物',       dataKey: 'capitalgoods', color: new THREE.Color('#ffb066'), position: new THREE.Vector3(-8.0, -1.5, -3.6) },
+    { name: '汽车与零部件',   dataKey: 'auto',         color: new THREE.Color('#ff9bd1'), position: new THREE.Vector3(-3.0, -3.2,  0.5) },
+    { name: '医疗保健设备',   dataKey: 'medequip',     color: new THREE.Color('#6bffcf'), position: new THREE.Vector3( 3.0, -3.0, -2.0) },
+    { name: '制药与生物科技', dataKey: 'pharmabio',    color: new THREE.Color('#86e4ff'), position: new THREE.Vector3( 5.6,  2.4, -3.6) },
+    { name: '技术硬件与设备', dataKey: 'techhw',       color: new THREE.Color('#6ab6ff'), position: new THREE.Vector3( 8.0, -0.6, -1.1) },
+    { name: '半导体',         dataKey: 'semis',        color: new THREE.Color('#ffd980'), position: new THREE.Vector3( 0.8,  4.3,  1.1) },
   ]
 
   // 由真实产业链数据构建扇区：main = ['上游','中游','下游']，branches = 每段一级 children 的前 5 个完整节点
@@ -1125,7 +1127,7 @@ onMounted(() => {
       if (item === sector) {
         currentTimeline.to(item.position, { x: -4.1, y: 0.18, z: 1.2, duration: 1.15 }, 0)
         currentTimeline.to(item.scale, { x: 0.94, y: 0.94, z: 0.94, duration: 1.15 }, 0)
-        currentTimeline.to(state, { opacity: 0.94, glow: 1.72, duration: 1.15, onUpdate: () => {
+        currentTimeline.to(state, { opacity: 0.94, glow: 1.19, duration: 1.15, onUpdate: () => {
           item.userData.shell.material.opacity = state.opacity
           item.userData.shell.material.emissiveIntensity = state.glow
           item.userData.label.material.opacity = 0.9
@@ -1215,7 +1217,7 @@ onMounted(() => {
       const state = sector.userData.state
       gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: 1.05, ease: 'power3.out' })
       gsap.to(sector.scale, { x: 1.18, y: 1.18, z: 1.18, duration: 1.05, ease: 'power3.out' })
-      gsap.to(state, { opacity: 1, glow: 1.4, duration: 1.05, ease: 'power3.out', onUpdate: () => {
+      gsap.to(state, { opacity: 1, glow: 0.88, duration: 1.05, ease: 'power3.out', onUpdate: () => {
         sector.userData.shell.material.opacity = state.opacity
         sector.userData.shell.material.emissiveIntensity = state.glow
         sector.userData.label.material.opacity = 0.96
