@@ -24,15 +24,6 @@
         <span class="blueprint-sector-menu-dot"></span>
         <span class="blueprint-sector-menu-name">{{ entry.name }}</span>
       </button>
-      <button
-        type="button"
-        class="blueprint-expand-all-btn"
-        :class="{ 'is-active': allExpanded }"
-        :disabled="!activeSectorKey"
-        @click="onToggleExpandAll"
-      >
-        {{ allExpanded ? '收起所有链路' : '一键展开' }}
-      </button>
     </nav>
 
     <div class="blueprint-hud">
@@ -109,13 +100,6 @@ function onSectorMenuClick(entry) {
   } else {
     selectSectorByKeyFn(entry.dataKey)
   }
-}
-
-// 一键展开所有 L1 子树
-const allExpanded = ref(false)
-let toggleExpandAllFn = () => {}
-function onToggleExpandAll() {
-  toggleExpandAllFn()
 }
 
 let cleanup = () => {}
@@ -381,12 +365,6 @@ onMounted(() => {
       })
     )
 
-    const spindle = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.012, 0.012, 3.4, 16),
-      new THREE.MeshBasicMaterial({ color: data.color, transparent: true, opacity: 0.16 })
-    )
-    spindle.rotation.z = Math.PI * 0.5
-
     const hit = new THREE.Mesh(
       new THREE.SphereGeometry(1.6, 16, 16),
       new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
@@ -397,7 +375,7 @@ onMounted(() => {
     const label = makeLabelSprite(data.name, data.color, 1, { maxLength: 8 })
     label.position.set(0, 2.58, 0)
 
-    group.add(spindle, shell, hit, label)
+    group.add(shell, hit, label)
     group.userData.shell = shell
     group.userData.label = label
     group.userData.hit = hit
@@ -567,7 +545,6 @@ onMounted(() => {
     savedCamPos = null
     savedLookTarget = null
     branchHitAreas.length = 0
-    allExpanded.value = false
   }
 
   function buildChainForSector(sector) {
@@ -1062,13 +1039,6 @@ onMounted(() => {
 
   function openBranchDetail(branchNode) {
     if (!branchNode || branchNode === focusedBranchNode) return
-    // "一键展开"模式下点单个 L1：先收起其它 L1 子树，进入聚焦详情态
-    if (allExpanded.value && activeChain) {
-      activeChain.branchNodes.forEach((bn) => {
-        if (bn !== branchNode && bn.userData.subtreeBuilt) collapseSubtree(bn)
-      })
-      allExpanded.value = false
-    }
     if (!focusedBranchNode) {
       savedCamPos = camera.position.clone()
       savedLookTarget = lookTarget.clone()
@@ -1253,22 +1223,6 @@ onMounted(() => {
     focusSector(target)
   }
 
-  // 一键展开 / 收起所有 L1 子树（不改镜头、不 dim 兄弟，纯子树切换）
-  toggleExpandAllFn = () => {
-    if (!activeChain) return
-    if (allExpanded.value) {
-      // 收起
-      activeChain.branchNodes.forEach((bn) => {
-        if (bn.userData.subtreeBuilt) collapseSubtree(bn)
-      })
-      allExpanded.value = false
-    } else {
-      // 展开前若有单独聚焦的 L1，先合上它
-      if (focusedBranchNode) closeBranchDetail()
-      activeChain.branchNodes.forEach((bn) => expandSubtree(bn))
-      allExpanded.value = true
-    }
-  }
 
   function pointerToNDC(event) {
     const rect = stage.getBoundingClientRect()
@@ -1420,7 +1374,6 @@ onMounted(() => {
       sector.position.x += (targetX - sector.position.x) * 0.018
       sector.position.y += (targetY - sector.position.y) * 0.04
       sector.position.z += (targetZ - sector.position.z) * 0.018
-      sector.rotation.y += 0.0032
       sector.userData.shell.position.y = Math.sin(elapsed * 1.15 + index) * 0.14
       sector.userData.label.position.y = 2.58 + Math.sin(elapsed * 1.15 + index) * 0.12
     })
@@ -1452,14 +1405,11 @@ onMounted(() => {
     camera.lookAt(lookTargetProxy)
 
     if (activeChain) {
-      activeChain.centerOrb.rotation.y += 0.03
       activeChain.centerOrb.material.opacity = 0.2 + sceneState.pulse * 0.8
       activeChain.centerOrb.scale.setScalar(1 + sceneState.pulse * 2.2)
       activeChain.nodes.concat(activeChain.branchNodes).forEach((node, index) => {
-        // 被点击聚焦的 L1 不再旋转，否则它的子树（作为 children）会被甩着一起转
+        // 主链/分支节点只漂浮，不旋转
         if (node === focusedBranchNode) return
-        node.rotation.y += 0.01 + index * 0.0008
-        node.userData.ring.rotation.z += 0.02
         node.position.y += Math.sin(elapsed * 1.8 + index * 0.55) * 0.0015
       })
       // 当前展开的子树节点：每帧轻微上下漂浮（不旋转），相位各异避免同步
@@ -1653,35 +1603,6 @@ onBeforeUnmount(() => cleanup())
 .blueprint-sector-menu-name {
   flex: 1;
   white-space: nowrap;
-}
-.blueprint-expand-all-btn {
-  margin-top: 10px;
-  width: 100%;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid rgba(133, 205, 255, 0.4);
-  border-radius: 8px;
-  background: rgba(123, 192, 255, 0.12);
-  color: rgba(220, 240, 255, 0.92);
-  font-family: inherit;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
-}
-.blueprint-expand-all-btn:hover:not(:disabled) {
-  background: rgba(123, 192, 255, 0.22);
-  border-color: rgba(133, 205, 255, 0.65);
-  color: #ffffff;
-}
-.blueprint-expand-all-btn.is-active {
-  background: linear-gradient(90deg, rgba(255, 196, 86, 0.22), rgba(255, 196, 86, 0.08));
-  border-color: rgba(255, 196, 86, 0.55);
-  color: #ffe9b8;
-}
-.blueprint-expand-all-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .blueprint-status {

@@ -25,7 +25,12 @@ export function getCityGeo(code) {
   return cityGeoMap[String(code)] || null
 }
 
+// 思路 B：相机距离对所有省份统一为湖北的 3.66；每个省的几何按"目标尺寸 / 自身 span"做缩放，
+// 让小省视觉放大、大省视觉缩小，最终在屏幕上接近一致大小。缩放围绕 bbox centroid 做。
 const provinceFramingMap = (() => {
+  const TARGET_SPAN = 6.64   // 湖北 span，作为虚拟参照尺寸
+  const MIN_SCALE = 0.5      // 大省最多缩到 50%（避免内蒙变成小点）
+  const MAX_SCALE = 3        // 小省最多放大 3x（避免几何离球面过远）
   const map = {}
   for (const feature of chinaGeo.features) {
     const code = String(feature?.properties?.adcode ?? '')
@@ -36,9 +41,13 @@ const provinceFramingMap = (() => {
     const lonSpan = (bbox[2] - bbox[0]) * Math.cos(midLat * Math.PI / 180)
     const latSpan = bbox[3] - bbox[1]
     const span = Math.max(lonSpan, latSpan)
+    const rawScale = span > 0.01 ? TARGET_SPAN / span : MAX_SCALE
+    const displayScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, rawScale))
     map[code] = {
       centroid: [(bbox[0] + bbox[2]) / 2, midLat],
-      distance: Math.min(6.8, Math.max(1.4, 0.85 * Math.pow(span, 0.55) + 1.25)),
+      distance: 3.66,
+      displayScale,
+      span,
     }
   }
   return map

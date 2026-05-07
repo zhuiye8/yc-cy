@@ -88,6 +88,22 @@ export function selectProvinceByData(data, state) {
     const provinceFeature = chinaGeo.features.find((f) => String(f.properties?.adcode) === String(data.code))
     if (provinceFeature) buildFocusBridgeLines(provinceFeature, GLOBE_RADIUS + 0.13, GLOBE_RADIUS + 0.35)
   }
+
+  // 思路 B：把选中省的几何缩放到湖北的虚拟尺寸（围绕该省的世界 centroid 做 scale），
+  // 配合相机用统一距离 3.66 看到大致同样大小。其它省份在 resetProvinceTransforms 里
+  // 已经被还原到 scale ≈ 1 / position 0
+  if (provinceGroup && framing) {
+    const scale = framing.displayScale ?? 1
+    const cWorld = lonLatToXYZ(focusCenter[0], focusCenter[1], GLOBE_RADIUS)
+    const offsetX = cWorld.x * (1 - scale)
+    const offsetY = cWorld.y * (1 - scale)
+    const offsetZ = cWorld.z * (1 - scale)
+    gsap.killTweensOf(provinceGroup.scale)
+    gsap.killTweensOf(provinceGroup.position)
+    gsap.to(provinceGroup.scale, { x: scale, y: scale, z: scale, duration: 0.85, ease: 'power2.inOut' })
+    gsap.to(provinceGroup.position, { x: offsetX, y: offsetY, z: offsetZ, duration: 0.85, ease: 'power2.inOut' })
+  }
+
   focusTo(focusCenter, focusDistance, 1.05)
 }
 
