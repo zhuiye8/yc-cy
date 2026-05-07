@@ -13,7 +13,7 @@ import {
   setFocusCityHighlight, buildFocusBridgeLines,
 } from './useGeoLayers.js'
 import { clearParticleEffects, createParticleCloud, getPreviewCityAnchor } from './useParticleCloud.js'
-import { getLocationMeta, chinaGeo } from '../data/map-scene-data.js'
+import { getLocationMeta, chinaGeo, getProvinceFraming } from '../data/map-scene-data.js'
 
 // ── Globe → lon/lat ray intersection (shared utility) ─────────────────────
 
@@ -76,14 +76,19 @@ export function selectProvinceByData(data, state) {
   dimProvinceLayerExcept(data.code)
   buildCityLayer(data.code)
   buildDistrictOutline(null)
-  setZoomWindow(isFocus ? 2.4 : 4.2, 24)
+
+  const framing = getProvinceFraming(data.code)
+  const focusCenter = framing?.centroid || data.center
+  const focusDistance = framing?.distance ?? (isFocus ? 3.8 : 6.2)
+
+  setZoomWindow(focusDistance * 0.6, 24)
   clearParticleEffects(particleCount)
 
   if (isFocus) {
     const provinceFeature = chinaGeo.features.find((f) => String(f.properties?.adcode) === String(data.code))
     if (provinceFeature) buildFocusBridgeLines(provinceFeature, GLOBE_RADIUS + 0.13, GLOBE_RADIUS + 0.35)
   }
-  focusTo(data.center, isFocus ? 3.8 : 6.2, isFocus ? 1.05 : 1.1)
+  focusTo(focusCenter, focusDistance, 1.05)
 }
 
 export function selectCityByData(data, state) {

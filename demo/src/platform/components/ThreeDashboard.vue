@@ -154,7 +154,7 @@ import { fetchSectorData } from '../data/sector-api.js'
 import {
   CATEGORY_STYLES, FILTERS, chinaGeo,
   getDetailItems, getProvinceHero, getProvinceChildren,
-  hubeiGeo, jiangsuGeo, wuhanGeo, yangzhouGeo,
+  provinceGeoMap, cityGeoMap,
 } from '../data/map-scene-data.js'
 import { buildWuhanActivityDetail } from '../data/activity-details.js'
 
@@ -190,10 +190,8 @@ import IntelDashPanel from './dashboard/IntelDashPanel.vue'
 import ActivityDetailModal from './dashboard/ActivityDetailModal.vue'
 
 // ── Populate focus geo maps ───────────────────────────────────────────────────
-FOCUS_PROVINCE_GEOS['320000'] = jiangsuGeo
-FOCUS_PROVINCE_GEOS['420000'] = hubeiGeo
-FOCUS_CITY_DISTRICT_GEOS['321000'] = yangzhouGeo
-FOCUS_CITY_DISTRICT_GEOS['420100'] = wuhanGeo
+Object.assign(FOCUS_PROVINCE_GEOS, provinceGeoMap)
+Object.assign(FOCUS_CITY_DISTRICT_GEOS, cityGeoMap)
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const screenRootRef = ref(null)

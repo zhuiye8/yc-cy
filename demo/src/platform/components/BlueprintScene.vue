@@ -380,18 +380,6 @@ onMounted(() => {
       })
     )
 
-    const halo = new THREE.Mesh(
-      new THREE.TorusGeometry(1.9, 0.08, 18, 120),
-      new THREE.MeshBasicMaterial({
-        color: data.color.clone().lerp(new THREE.Color(0xffffff), 0.28),
-        transparent: true,
-        opacity: 0.86,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      })
-    )
-    halo.rotation.x = Math.PI * 0.55
-
     const spindle = new THREE.Mesh(
       new THREE.CylinderGeometry(0.012, 0.012, 3.4, 16),
       new THREE.MeshBasicMaterial({ color: data.color, transparent: true, opacity: 0.16 })
@@ -408,14 +396,12 @@ onMounted(() => {
     const label = makeLabelSprite(data.name, data.color, 1, { maxLength: 8 })
     label.position.set(0, 2.58, 0)
 
-    group.add(spindle, halo, shell, hit, label)
+    group.add(spindle, shell, hit, label)
     group.userData.shell = shell
-    group.userData.halo = halo
     group.userData.label = label
     group.userData.hit = hit
 
     bloomEffect.selection.add(shell)
-    bloomEffect.selection.add(halo)
     sectorHitAreas.push(hit)
     driftGroup.add(group)
     sectors.push(group)
@@ -1139,10 +1125,9 @@ onMounted(() => {
       if (item === sector) {
         currentTimeline.to(item.position, { x: -4.1, y: 0.18, z: 1.2, duration: 1.15 }, 0)
         currentTimeline.to(item.scale, { x: 0.94, y: 0.94, z: 0.94, duration: 1.15 }, 0)
-        currentTimeline.to(state, { opacity: 0.94, glow: 1.72, ring: 0.92, duration: 1.15, onUpdate: () => {
+        currentTimeline.to(state, { opacity: 0.94, glow: 1.72, duration: 1.15, onUpdate: () => {
           item.userData.shell.material.opacity = state.opacity
           item.userData.shell.material.emissiveIntensity = state.glow
-          item.userData.halo.material.opacity = 0.22 + state.ring * 0.18
           item.userData.label.material.opacity = 0.9
         }}, 0)
       } else {
@@ -1154,11 +1139,10 @@ onMounted(() => {
           duration: 1.05
         }, 0)
         currentTimeline.to(item.scale, { x: 0.72, y: 0.72, z: 0.72, duration: 1.05 }, 0)
-        currentTimeline.to(item.userData.state, { opacity: 0.08, glow: 0.06, ring: 0.08, duration: 1.05, onUpdate: () => {
+        currentTimeline.to(item.userData.state, { opacity: 0.08, glow: 0.06, duration: 1.05, onUpdate: () => {
           const s = item.userData.state
           item.userData.shell.material.opacity = s.opacity
           item.userData.shell.material.emissiveIntensity = s.glow
-          item.userData.halo.material.opacity = s.ring
           item.userData.label.material.opacity = Math.min(0.16, s.opacity)
         }}, 0)
       }
@@ -1231,10 +1215,9 @@ onMounted(() => {
       const state = sector.userData.state
       gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: 1.05, ease: 'power3.out' })
       gsap.to(sector.scale, { x: 1.18, y: 1.18, z: 1.18, duration: 1.05, ease: 'power3.out' })
-      gsap.to(state, { opacity: 1, glow: 1.4, ring: 0.92, duration: 1.05, ease: 'power3.out', onUpdate: () => {
+      gsap.to(state, { opacity: 1, glow: 1.4, duration: 1.05, ease: 'power3.out', onUpdate: () => {
         sector.userData.shell.material.opacity = state.opacity
         sector.userData.shell.material.emissiveIntensity = state.glow
-        sector.userData.halo.material.opacity = state.ring
         sector.userData.label.material.opacity = 0.96
       }})
     })
@@ -1421,16 +1404,12 @@ onMounted(() => {
       sector.position.y += (targetY - sector.position.y) * 0.04
       sector.position.z += (targetZ - sector.position.z) * 0.018
       sector.rotation.y += 0.0032
-      sector.userData.halo.rotation.z += 0.006 + index * 0.0003
-      sector.userData.halo.rotation.x = 1.2 + Math.sin(elapsed * 0.7 + index) * 0.08
       sector.userData.shell.position.y = Math.sin(elapsed * 1.15 + index) * 0.14
       sector.userData.label.position.y = 2.58 + Math.sin(elapsed * 1.15 + index) * 0.12
     })
 
     if (sceneState.focusedSector) {
       const focus = sceneState.focusedSector
-      focus.userData.halo.rotation.z += 0.02
-      focus.userData.halo.rotation.x = 1.4 + Math.sin(elapsed * 2.4) * 0.14
       focus.userData.shell.position.y = Math.sin(elapsed * 2.2) * 0.08
       focus.userData.label.position.y = 2.25 + Math.sin(elapsed * 2.2) * 0.12
     }

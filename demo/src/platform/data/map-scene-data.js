@@ -1,11 +1,54 @@
 import chinaGeo from './map/china.json'
-import jiangsuGeo from './map/jiangsu.json'
-import yangzhouGeo from './map/yangzhou.json'
-import hubeiGeo from './map/hubei.json'
-import wuhanGeo from './map/wuhan.json'
 import locationIndex from './map/location.json'
+import { getPrimaryPolygonBBox } from '../utils/geoMath.js'
 
-export { chinaGeo, jiangsuGeo, yangzhouGeo, hubeiGeo, wuhanGeo, locationIndex }
+const provinceModules = import.meta.glob('./map/provinces/*.json', { eager: true, import: 'default' })
+const cityModules = import.meta.glob('./map/cities/*.json', { eager: true, import: 'default' })
+
+function buildAdcodeMap(modules) {
+  const map = {}
+  for (const [path, geo] of Object.entries(modules)) {
+    const match = path.match(/(\d+)\.json$/)
+    if (match) map[match[1]] = geo
+  }
+  return map
+}
+
+export const provinceGeoMap = buildAdcodeMap(provinceModules)
+export const cityGeoMap = buildAdcodeMap(cityModules)
+
+export function getProvinceGeo(code) {
+  return provinceGeoMap[String(code)] || null
+}
+
+export function getCityGeo(code) {
+  return cityGeoMap[String(code)] || null
+}
+
+const provinceFramingMap = (() => {
+  const map = {}
+  for (const feature of chinaGeo.features) {
+    const code = String(feature?.properties?.adcode ?? '')
+    if (!code) continue
+    const bbox = getPrimaryPolygonBBox(feature)
+    if (!bbox) continue
+    const midLat = (bbox[1] + bbox[3]) / 2
+    const lonSpan = (bbox[2] - bbox[0]) * Math.cos(midLat * Math.PI / 180)
+    const latSpan = bbox[3] - bbox[1]
+    const span = Math.max(lonSpan, latSpan)
+    map[code] = {
+      centroid: [(bbox[0] + bbox[2]) / 2, midLat],
+      distance: Math.min(6.8, Math.max(1.4, 0.85 * Math.pow(span, 0.55) + 1.25)),
+    }
+  }
+  return map
+})()
+
+export function getProvinceFraming(code) {
+  return provinceFramingMap[String(code)] || null
+}
+
+export { chinaGeo, locationIndex }
 
 export const CATEGORY_STYLES = {
   Talent: { color: 0x58d5ff, glow: 0x9edfff, label: '\u4eba\u624d' },

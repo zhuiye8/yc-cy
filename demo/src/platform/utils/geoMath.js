@@ -25,6 +25,41 @@ export function geometryToPolygons(geometry) {
   return []
 }
 
+export function getFeatureBBox(feature) {
+  let lonMin = Infinity, lonMax = -Infinity, latMin = Infinity, latMax = -Infinity
+  for (const polygon of geometryToPolygons(feature?.geometry)) {
+    for (const ring of polygon) {
+      for (const [lon, lat] of ring) {
+        if (lon < lonMin) lonMin = lon
+        if (lon > lonMax) lonMax = lon
+        if (lat < latMin) latMin = lat
+        if (lat > latMax) latMax = lat
+      }
+    }
+  }
+  return Number.isFinite(lonMin) ? [lonMin, latMin, lonMax, latMax] : null
+}
+
+export function getPrimaryPolygonBBox(feature) {
+  const polys = geometryToPolygons(feature?.geometry)
+  let best = null, bestPts = 0
+  for (const poly of polys) {
+    const pts = poly[0]?.length || 0
+    if (pts > bestPts) { bestPts = pts; best = poly }
+  }
+  if (!best) return null
+  let lonMin = Infinity, lonMax = -Infinity, latMin = Infinity, latMax = -Infinity
+  for (const ring of best) {
+    for (const [lon, lat] of ring) {
+      if (lon < lonMin) lonMin = lon
+      if (lon > lonMax) lonMax = lon
+      if (lat < latMin) latMin = lat
+      if (lat > latMax) latMax = lat
+    }
+  }
+  return Number.isFinite(lonMin) ? [lonMin, latMin, lonMax, latMax] : null
+}
+
 export function sanitizeRing(ring) {
   const output = ring.map(([lng, lat]) => [Number(lng), Number(lat)])
   if (output.length > 1) {
