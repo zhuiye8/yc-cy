@@ -473,11 +473,15 @@ onMounted(() => {
       })
     )
     ring.rotation.x = Math.PI * 0.5
-    const labelSprite = makeLabelSprite(label, color, 0.65, {
+    const labelSprite = makeLabelSprite(label, color, options.labelScale ?? 0.65, {
       maxLength: options.maxLength ?? 12,
       fontSize: options.fontSize ?? 40
     })
-    labelSprite.position.set(0, scale * 2.3, 0)
+    if (options.labelOffset) {
+      labelSprite.position.copy(options.labelOffset)
+    } else {
+      labelSprite.position.set(0, scale * 2.3, 0)
+    }
     group.add(ring, core, labelSprite)
     group.scale.setScalar(state.scale)
     group.userData = {
@@ -785,8 +789,19 @@ onMounted(() => {
         }
         allLocalPositions.push(l1Pos.clone())
 
+        // 标签做小 + 朝径向外侧偏移：相邻子节点的 sprite 在屏幕上拉开间距，避免重叠
+        const radialDir = l1Pos.length() > 1e-3
+          ? l1Pos.clone().normalize()
+          : new THREE.Vector3(1, 0, 0)
+        const radialPush = level === 2 ? 0.85 : 0.55
+        const yLift = scale * 1.4
+        const labelOffset = radialDir.clone().multiplyScalar(radialPush)
+          .add(new THREE.Vector3(0, yLift, 0))
         const node = createNode(data.name, color.clone(), scale, {
-          maxLength: level <= 2 ? 12 : 10,
+          maxLength: level === 2 ? 8 : 6,
+          fontSize: level === 2 ? 32 : 28,
+          labelScale: level === 2 ? 0.50 : 0.40,
+          labelOffset,
           levelLabel: `L${level}`
         })
         node.position.copy(pos)
