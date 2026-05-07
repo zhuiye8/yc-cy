@@ -62,7 +62,7 @@ import {
   SelectiveBloomEffect,
   ShockWaveEffect
 } from 'postprocessing'
-import { industryChainGraphData } from '../data/industry-chain-graph.js'
+import { industryChainGraphData, sectorList } from '../data/industry-chain-graph.js'
 
 const emit = defineEmits(['exit'])
 
@@ -82,16 +82,12 @@ const labelTooltip = reactive({
 let resetSceneFn = () => {}
 const onReset = () => resetSceneFn()
 
-// 左上角切换面板：7 个产业大类（GICS Industry Group） dataKey + 名字 + 颜色（与下方 SECTOR_DEFS 保持一致）
-const sectorMenu = [
-  { name: '材料',           dataKey: 'materials',    colorHex: '#b8aaff' },
-  { name: '资本货物',       dataKey: 'capitalgoods', colorHex: '#ffb066' },
-  { name: '汽车与零部件',   dataKey: 'auto',         colorHex: '#ff9bd1' },
-  { name: '医疗保健设备',   dataKey: 'medequip',     colorHex: '#6bffcf' },
-  { name: '制药与生物科技', dataKey: 'pharmabio',    colorHex: '#86e4ff' },
-  { name: '技术硬件与设备', dataKey: 'techhw',       colorHex: '#6ab6ff' },
-  { name: '半导体',         dataKey: 'semis',        colorHex: '#ffd980' },
-]
+// 主产业菜单：50 条产业链各一项，顺序按 GICS 大类聚合（dataKey/colorHex/position 全部由 build 脚本生成）
+const sectorMenu = sectorList.map((s) => ({
+  name: s.name,
+  dataKey: s.dataKey,
+  colorHex: s.colorHex,
+}))
 const activeSectorKey = ref(null)
 let selectSectorByKeyFn = () => {}
 function onSectorMenuClick(entry) {
@@ -352,8 +348,9 @@ onMounted(() => {
     group.userData.labelColor = data.color
     group.userData.state = { opacity: 1, glow: 0.5, ring: 0.3 }
 
+    // 50 主产业球密度大，体积缩到原来的 ~50%（半径 1.24 → 0.62），命中区随之缩小
     const shell = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.24, 4),
+      new THREE.IcosahedronGeometry(0.62, 3),
       new THREE.MeshStandardMaterial({
         color: data.color,
         emissive: data.color,
@@ -366,14 +363,14 @@ onMounted(() => {
     )
 
     const hit = new THREE.Mesh(
-      new THREE.SphereGeometry(1.6, 16, 16),
+      new THREE.SphereGeometry(0.85, 12, 12),
       new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
     )
     hit.userData.owner = group
     hit.userData.labelOwner = group
 
-    const label = makeLabelSprite(data.name, data.color, 1, { maxLength: 8 })
-    label.position.set(0, 2.58, 0)
+    const label = makeLabelSprite(data.name, data.color, 0.6, { maxLength: 10 })
+    label.position.set(0, 1.32, 0)
 
     group.add(shell, hit, label)
     group.userData.shell = shell
@@ -387,16 +384,13 @@ onMounted(() => {
     return group
   }
 
-  // 7 大产业（GICS Industry Group）的视觉配置（颜色、漂浮位置、对应数据 key）
-  const SECTOR_DEFS = [
-    { name: '材料',           dataKey: 'materials',    color: new THREE.Color('#b8aaff'), position: new THREE.Vector3(-7.6,  2.6, -1.6) },
-    { name: '资本货物',       dataKey: 'capitalgoods', color: new THREE.Color('#ffb066'), position: new THREE.Vector3(-8.0, -1.5, -3.6) },
-    { name: '汽车与零部件',   dataKey: 'auto',         color: new THREE.Color('#ff9bd1'), position: new THREE.Vector3(-3.0, -3.2,  0.5) },
-    { name: '医疗保健设备',   dataKey: 'medequip',     color: new THREE.Color('#6bffcf'), position: new THREE.Vector3( 3.0, -3.0, -2.0) },
-    { name: '制药与生物科技', dataKey: 'pharmabio',    color: new THREE.Color('#86e4ff'), position: new THREE.Vector3( 5.6,  2.4, -3.6) },
-    { name: '技术硬件与设备', dataKey: 'techhw',       color: new THREE.Color('#6ab6ff'), position: new THREE.Vector3( 8.0, -0.6, -1.1) },
-    { name: '半导体',         dataKey: 'semis',        color: new THREE.Color('#ffd980'), position: new THREE.Vector3( 0.8,  4.3,  1.1) },
-  ]
+  // 50 个主产业球：颜色/位置/dataKey 全部由 build 脚本算好（按 GICS 大类分色，椭球面 Fibonacci 分布）
+  const SECTOR_DEFS = sectorList.map((s) => ({
+    name: s.name,
+    dataKey: s.dataKey,
+    color: new THREE.Color(s.colorHex),
+    position: new THREE.Vector3(s.position.x, s.position.y, s.position.z),
+  }))
 
   // 由真实产业链数据构建扇区：main = ['上游','中游','下游']，branches = 每段一级 children 的前 5 个完整节点
   const BRANCH_LIMIT = 5
@@ -1023,6 +1017,8 @@ onMounted(() => {
 
   function switchFocusBranch(newFocused) {
     if (newFocused === focusedBranchNode) return
+    // 切换 L1 时先解除 L2 聚焦，避免悬挂状态
+    focusedL2Node = null
     if (focusedBranchNode) {
       collapseSubtree(focusedBranchNode)
       highlightBranchNode(focusedBranchNode, false)
@@ -1035,6 +1031,60 @@ onMounted(() => {
     } else {
       dimSurroundings(false)
     }
+  }
+
+  // ── L2 节点（## 段）聚焦：高亮选中那条路径，其它 L2 兄弟 + 它们的 L3 子节点变透明
+  let focusedL2Node = null
+
+  function setSubtreeNodeOpacity(node, targetOpacity) {
+    const ud = node?.userData
+    if (!ud?.state || !ud?.core || !ud?.ring || !ud?.label) return
+    const { state, core, ring, label } = ud
+    gsap.killTweensOf(state)
+    gsap.to(state, {
+      opacity: targetOpacity,
+      duration: 0.28, ease: 'power2.out',
+      onUpdate: () => {
+        core.material.opacity = state.opacity
+        core.material.emissiveIntensity = state.glow
+        ring.material.opacity = state.opacity * 0.55
+        label.material.opacity = state.opacity
+      }
+    })
+  }
+
+  function applyL2Highlight() {
+    if (!focusedBranchNode) return
+    const subtree = focusedBranchNode.userData.subtreeNodes || []
+    for (const node of subtree) {
+      const lvl = node.userData.subtreeLevel
+      if (lvl !== 2 && lvl !== 3) continue
+      let dimmed = false
+      if (focusedL2Node) {
+        if (lvl === 2) dimmed = (node !== focusedL2Node)
+        else dimmed = (node.parent !== focusedL2Node)
+      }
+      setSubtreeNodeOpacity(node, dimmed ? 0.16 : 0.92)
+    }
+  }
+
+  function openL2Detail(l2Node) {
+    if (!focusedBranchNode || l2Node?.userData?.subtreeLevel !== 2) return
+    if (l2Node === focusedL2Node) {
+      // 同一 L2 再点 → 解除聚焦
+      focusedL2Node = null
+    } else {
+      focusedL2Node = l2Node
+    }
+    applyL2Highlight()
+  }
+
+  function getSubtreeHitAreas() {
+    if (!focusedBranchNode) return []
+    return (focusedBranchNode.userData.subtreeNodes || [])
+      .filter(n => n.userData.subtreeLevel === 2)
+      .map(n => n.userData.core)
+      .filter(Boolean)
   }
 
   function openBranchDetail(branchNode) {
@@ -1309,6 +1359,18 @@ onMounted(() => {
     pointer.x = p.x
     pointer.y = p.y
     raycaster.setFromCamera(pointer, camera)
+    // 已聚焦 L1 → 先检测 L2 子节点点击（聚焦该路径，其它兄弟 L2 + 它们的 L3 变透明）
+    if (sceneState.focusedSector && !sceneState.busy && focusedBranchNode) {
+      const l2Areas = getSubtreeHitAreas()
+      if (l2Areas.length) {
+        const l2Hit = raycaster.intersectObjects(l2Areas, false)[0]
+        const l2Owner = l2Hit?.object?.userData?.labelOwner
+        if (l2Owner?.userData?.subtreeLevel === 2) {
+          openL2Detail(l2Owner)
+          return
+        }
+      }
+    }
     // 已聚焦产业 + 动画完成 → 优先检测 L1 分支点击
     if (sceneState.focusedSector && !sceneState.busy && branchHitAreas.length) {
       const branchHit = raycaster.intersectObjects(branchHitAreas, false)[0]
@@ -1544,6 +1606,7 @@ onBeforeUnmount(() => cleanup())
   left: 20px;
   z-index: 6;
   width: 158px;
+  max-height: calc(100vh - 80px);
   padding: 12px 12px 10px;
   border-radius: 16px;
   border: 1px solid rgba(133, 205, 255, 0.2);
@@ -1552,14 +1615,37 @@ onBeforeUnmount(() => cleanup())
   box-shadow: 0 0 28px rgba(25, 96, 180, 0.16);
   font-family: "Segoe UI", "PingFang SC", sans-serif;
   pointer-events: auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(133, 205, 255, 0.35) transparent;
+}
+.blueprint-sector-menu::-webkit-scrollbar {
+  width: 6px;
+}
+.blueprint-sector-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+.blueprint-sector-menu::-webkit-scrollbar-thumb {
+  background: rgba(133, 205, 255, 0.32);
+  border-radius: 3px;
+}
+.blueprint-sector-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(133, 205, 255, 0.55);
 }
 .blueprint-sector-menu-title {
-  margin-bottom: 8px;
-  padding: 0 4px;
+  position: sticky;
+  top: -12px;
+  margin: -12px -12px 4px;
+  padding: 12px 16px 8px;
+  background: linear-gradient(to bottom, rgba(8, 14, 26, 0.95) 70%, rgba(8, 14, 26, 0.0));
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.22em;
   color: rgba(150, 200, 240, 0.78);
+  z-index: 1;
 }
 .blueprint-sector-menu-item {
   width: 100%;

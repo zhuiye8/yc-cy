@@ -1,132 +1,60 @@
-// Build industry-chain-graph.js from the GICS dataset.
+// Build industry-chain-graph.js from gics_local_site_v9/extensions/*/*_对外版.md
 //
-// Input  : ../../../gics_local_site_v9/gics_local_site_v9/{data/registry/extensions.csv,extensions/<gics>/<chain>_对外版.md}
-// Output : src/platform/data/industry-chain-graph.js
+// 1 个 *_对外版.md = 1 个主产业球
+//   - 主产业名 = markdown # 标题（去掉"产业链"后缀）
+//   - 子树   = ## / ### / #### 嵌套层级
+//   - 颜色   = 按 GICS Industry Group（前 4 位代码）大类分色
+//   - 位置   = 在椭球面上做 Fibonacci spiral 分布
 //
-// Run    : node scripts/build_industry_chain_graph.mjs
-//
-// Tree shape per sector (consumed by BlueprintScene.vue):
-//   industryChainGraphData[groupKey] = {
-//     upstream:   { label, root: { id, name, children? } },
-//     midstream?: { label, root: ... },
-//     downstream?:{ label, root: ... },
-//   }
+// 输出两个 export：
+//   - industryChainGraphData[dataKey] = { upstream: { label, root: { id, name, children } } }
+//   - sectorList = [{ dataKey, name, gicsCode, gicsName, colorHex, position: {x,y,z} }, ...]
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const ROOT = resolve(__dirname, '..')                         // demo/
+const ROOT = resolve(__dirname, '..')
 const GICS = resolve(ROOT, '../../gics_local_site_v9/gics_local_site_v9')
-const REGISTRY = resolve(GICS, 'data/registry/extensions.csv')
+const EXT_DIR = resolve(GICS, 'extensions')
 const OUT = resolve(ROOT, 'src/platform/data/industry-chain-graph.js')
 
-// ── Sector layout: GICS Industry Group (4-digit) → up/mid/down buckets of GICS sub-industries ──
-// Each bucket lists the sub-industry codes (8-digit) that belong under that segment.
-const SECTOR_LAYOUT = [
-  {
-    key: 'materials',
-    name: '材料',
-    code: '1510',
-    segments: [
-      { axis: 'upstream', label: '专用化学品', subs: ['15101050'] },
-    ],
-  },
-  {
-    key: 'capitalgoods',
-    name: '资本货物',
-    code: '2010',
-    segments: [
-      { axis: 'upstream',   label: '航空航天与国防',     subs: ['20101010'] },
-      { axis: 'midstream',  label: '电气零部件与设备',   subs: ['20104010'] },
-      { axis: 'downstream', label: '工程与工业机械',     subs: ['20106010', '20106020'] },
-    ],
-  },
-  {
-    key: 'auto',
-    name: '汽车与零部件',
-    code: '2510',
-    segments: [
-      { axis: 'upstream',  label: '汽车零部件与设备', subs: ['25101010'] },
-      { axis: 'midstream', label: '汽车制造商',       subs: ['25102010'] },
-    ],
-  },
-  {
-    key: 'medequip',
-    name: '医疗保健设备',
-    code: '3510',
-    segments: [
-      { axis: 'upstream',  label: '医疗保健设备', subs: ['35101010'] },
-      { axis: 'midstream', label: '医疗保健用品', subs: ['35101020'] },
-    ],
-  },
-  {
-    key: 'pharmabio',
-    name: '制药与生物科技',
-    code: '3520',
-    segments: [
-      { axis: 'upstream',  label: '生物技术', subs: ['35201010'] },
-      { axis: 'midstream', label: '制药',     subs: ['35202010'] },
-    ],
-  },
-  {
-    key: 'techhw',
-    name: '技术硬件与设备',
-    code: '4520',
-    segments: [
-      { axis: 'upstream',   label: '通信设备',   subs: ['45201020'] },
-      { axis: 'midstream',  label: '技术硬件',   subs: ['45202030'] },
-      { axis: 'downstream', label: '电子元件',   subs: ['45203015'] },
-    ],
-  },
-  {
-    key: 'semis',
-    name: '半导体',
-    code: '4530',
-    segments: [
-      { axis: 'upstream',  label: '半导体材料与设备', subs: ['45301010'] },
-      { axis: 'midstream', label: '半导体',           subs: ['45301020'] },
-    ],
-  },
-]
-
-// ── CSV parsing (RFC 4180-ish: handles quoted fields, commas inside quotes) ──
-function parseCSV(text) {
-  const rows = []
-  let row = []
-  let field = ''
-  let inQuotes = false
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++ }
-        else { inQuotes = false }
-      } else {
-        field += c
-      }
-    } else {
-      if (c === ',') { row.push(field); field = '' }
-      else if (c === '\r') { /* skip */ }
-      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = '' }
-      else if (c === '"' && field === '') { inQuotes = true }
-      else { field += c }
-    }
-  }
-  if (field !== '' || row.length) { row.push(field); rows.push(row) }
-  return rows
+// GICS 一级大类（前 2 位） → 颜色
+const GICS_GROUP_COLOR = {
+  '15': '#b8aaff', // 材料
+  '20': '#ffb066', // 资本货物 / 工业
+  '25': '#ff9bd1', // 汽车与零部件
+  '35': '#86e4ff', // 医疗保健 / 制药
+  '45': '#6bffcf', // 技术硬件 / 半导体
 }
 
-// ── Markdown chain parser ──
-// Reads a chain markdown and returns a tree of { id, name, children? } for the chain root and below.
-// H1 is the root; H2/H3/H4/... are nested by level.
+// GICS 子行业（8 位） → 中文名（用于 sectorList 元数据，不直接显示）
+const GICS_NAMES = {
+  '15101050': '专用化学品',
+  '20101010': '航空航天与国防',
+  '20104010': '电气零部件与设备',
+  '20106010': '工程机械与重型运输设备',
+  '20106020': '工业机械、用品与零部件',
+  '25101010': '汽车零部件与设备',
+  '25102010': '汽车制造商',
+  '35101010': '医疗保健设备',
+  '35101020': '医疗保健用品',
+  '35201010': '生物技术',
+  '35202010': '制药',
+  '45201020': '通信设备',
+  '45202030': '技术硬件、存储与外设',
+  '45203015': '电子元件',
+  '45301010': '半导体材料与设备',
+  '45301020': '半导体',
+}
+
+// ── markdown 解析 ─────────────────────────────────────────────────────────
+// # 是根（产业链名），## ### #### ... 按层级嵌套
 function parseChainMarkdown(text, idPrefix) {
-  // Strip BOM
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1)
   const lines = text.split(/\r?\n/)
   const root = { id: `${idPrefix}-r`, name: '', children: [] }
-  // Stack tracks open nodes by heading depth, index = depth (1=H1, 2=H2…)
   const stack = []
   stack[1] = root
   let counter = 0
@@ -139,10 +67,10 @@ function parseChainMarkdown(text, idPrefix) {
     const depth = m[1].length
     const name = m[2]
     if (depth === 1) {
-      root.name = name.replace(/产业链$/, '').trim() || name
+      // 不同对外版的 H1 后缀有：产业链 / 产业链全景图 / 无后缀，统一去掉常见后缀
+      root.name = name.replace(/(产业链全景图|产业链全景|产业链)$/, '').trim() || name
       continue
     }
-    // find parent at depth-1, falling back upward
     let parent = null
     for (let d = depth - 1; d >= 1; d--) {
       if (stack[d]) { parent = stack[d]; break }
@@ -153,120 +81,151 @@ function parseChainMarkdown(text, idPrefix) {
     parent.children = parent.children || []
     parent.children.push(node)
     stack[depth] = node
-    // clear deeper levels
     for (let d = depth + 1; d < stack.length; d++) stack[d] = undefined
   }
   return root
 }
 
-// ── Main ──
-const csvText = readFileSync(REGISTRY, 'utf8')
-const rows = parseCSV(csvText)
-const header = rows.shift()
-const idx = Object.fromEntries(header.map((h, i) => [h.replace(/^﻿/, ''), i]))
-
-const chainsBySub = {} // sub-industry code → [{name, file, sortOrder, ...}]
-for (const r of rows) {
-  if (!r.length || !r[idx.target_code]) continue
-  if ((r[idx.status] || '').toLowerCase() !== 'active') continue
-  const sub = String(r[idx.target_code])
-  const entry = {
-    extId: r[idx.ext_id],
-    name: r[idx.display_name],
-    filePath: r[idx.file_path_public],
-    sortOrder: Number(r[idx.sort_order] || 0),
+// ── Fibonacci spiral on a ellipsoid surface ─────────────────────────────
+// 50+ 球均匀散布；y 从 1 到 -1 扫描，theta 用 golden angle
+function spreadOnEllipsoid(n, scale, center) {
+  const golden = Math.PI * (3 - Math.sqrt(5))
+  const positions = []
+  for (let i = 0; i < n; i++) {
+    const y = n === 1 ? 0 : 1 - (i / (n - 1)) * 2  // -1 to 1
+    const r = Math.sqrt(Math.max(0, 1 - y * y))
+    const theta = i * golden
+    const ux = r * Math.cos(theta)
+    const uz = r * Math.sin(theta)
+    positions.push({
+      x: +(center.x + ux * scale.x).toFixed(3),
+      y: +(center.y + y * scale.y).toFixed(3),
+      z: +(center.z + uz * scale.z).toFixed(3),
+    })
   }
-  ;(chainsBySub[sub] ||= []).push(entry)
-}
-for (const sub of Object.keys(chainsBySub)) {
-  chainsBySub[sub].sort((a, b) => a.sortOrder - b.sortOrder)
+  return positions
 }
 
-// Build per-sector tree
-const out = {}
-let chainIdCounter = 0
+// ── 扫描 extensions ────────────────────────────────────────────────────
+const sectorEntries = []
+const gicsDirs = readdirSync(EXT_DIR).filter(d => /^\d{8}$/.test(d)).sort()
+for (const gicsCode of gicsDirs) {
+  const sub = resolve(EXT_DIR, gicsCode)
+  const files = readdirSync(sub).filter(f => f.endsWith('_对外版.md')).sort()
+  files.forEach((file, i) => {
+    const chainName = file.replace(/_对外版\.md$/, '')
+    const filePath = resolve(sub, file)
+    const md = readFileSync(filePath, 'utf8')
+    const idPrefix = `c_${gicsCode}_${i}`
+    const parsedRoot = parseChainMarkdown(md, idPrefix)
+    const displayName = parsedRoot.name || chainName
 
-for (const sector of SECTOR_LAYOUT) {
-  const sectorOut = {}
-  for (const seg of sector.segments) {
-    const segChains = []
-    for (const sub of seg.subs) {
-      const list = chainsBySub[sub] || []
-      for (const entry of list) {
-        chainIdCounter++
-        const idPrefix = `${sector.key}-${chainIdCounter}`
-        const mdPath = resolve(GICS, entry.filePath)
-        let chainRoot
-        try {
-          const md = readFileSync(mdPath, 'utf8')
-          chainRoot = parseChainMarkdown(md, idPrefix)
-        } catch (e) {
-          console.warn('SKIP missing chain:', mdPath, e.message)
-          continue
-        }
-        // Use display_name from CSV as the chain root name
-        chainRoot.name = entry.name
-        chainRoot.id = idPrefix
-        segChains.push(chainRoot)
-      }
-    }
-    if (!segChains.length) continue
-    const segRootId = `${sector.key}-${seg.axis}`
-    sectorOut[seg.axis] = {
-      label: ({ upstream: '上游', midstream: '中游', downstream: '下游' })[seg.axis],
-      root: {
-        id: segRootId,
-        name: seg.label,
-        children: segChains,
-      },
-    }
+    const groupCode = gicsCode.slice(0, 2)
+    const colorHex = GICS_GROUP_COLOR[groupCode] || '#86e4ff'
+    const gicsName = GICS_NAMES[gicsCode] || gicsCode
+
+    sectorEntries.push({
+      dataKey: idPrefix,
+      name: displayName,
+      gicsCode,
+      gicsName,
+      colorHex,
+      tree: parsedRoot,
+    })
+  })
+}
+
+// ── 给所有主产业打位置（在椭球面 Fibonacci 分布）─────────────────────
+const N = sectorEntries.length
+const positions = spreadOnEllipsoid(
+  N,
+  { x: 8.4, y: 4.0, z: 4.2 },     // 椭球半径（x 比 yz 长，相机看横向更宽）
+  { x: 0, y: 0.4, z: -1.6 },      // 椭球中心
+)
+sectorEntries.forEach((s, i) => { s.position = positions[i] })
+
+// ── 构造 industryChainGraphData ────────────────────────────────────────
+// 把链下的 ## 段平均分到上/中/下游三段（保留 BlueprintScene 现有视觉契约）
+function splitInThirds(arr) {
+  const n = arr.length
+  if (!n) return [[], [], []]
+  const a = Math.ceil(n / 3)
+  const remain = n - a
+  const b = Math.ceil(remain / 2)
+  return [arr.slice(0, a), arr.slice(a, a + b), arr.slice(a + b)]
+}
+const graph = {}
+for (const s of sectorEntries) {
+  const sections = s.tree.children || []
+  const [up, mid, down] = splitInThirds(sections)
+  const segs = {}
+  if (up.length) segs.upstream = {
+    label: '上游',
+    root: { id: `${s.dataKey}-up`, name: s.name, children: up },
   }
-  out[sector.key] = sectorOut
+  if (mid.length) segs.midstream = {
+    label: '中游',
+    root: { id: `${s.dataKey}-mid`, name: s.name, children: mid },
+  }
+  if (down.length) segs.downstream = {
+    label: '下游',
+    root: { id: `${s.dataKey}-down`, name: s.name, children: down },
+  }
+  graph[s.dataKey] = segs
 }
 
-// ── Pretty-print to JS source ──
+// ── 构造 sectorList（不带几何 tree，给 BlueprintScene 用作菜单+视觉配置）
+const sectorList = sectorEntries.map(s => ({
+  dataKey: s.dataKey,
+  name: s.name,
+  gicsCode: s.gicsCode,
+  gicsName: s.gicsName,
+  colorHex: s.colorHex,
+  position: s.position,
+}))
+
+// ── 输出 ───────────────────────────────────────────────────────────────
 function emit(value, indent = 0) {
   const pad = '  '.repeat(indent)
   const pad1 = '  '.repeat(indent + 1)
   if (Array.isArray(value)) {
     if (!value.length) return '[]'
-    return '[\n' + value.map((v) => pad1 + emit(v, indent + 1)).join(',\n') + '\n' + pad + ']'
+    return '[\n' + value.map(v => pad1 + emit(v, indent + 1)).join(',\n') + '\n' + pad + ']'
   }
   if (value && typeof value === 'object') {
     const keys = Object.keys(value)
     if (!keys.length) return '{}'
-    return '{\n' + keys.map((k) => `${pad1}${k}: ${emit(value[k], indent + 1)}`).join(',\n') + '\n' + pad + '}'
+    return '{\n' + keys.map(k => `${pad1}${JSON.stringify(k)}: ${emit(value[k], indent + 1)}`).join(',\n') + '\n' + pad + '}'
   }
-  if (typeof value === 'string') {
-    return JSON.stringify(value)
-  }
+  if (typeof value === 'string') return JSON.stringify(value)
   return String(value)
 }
 
 const banner =
 `/**
  * 产业链图谱数据 — 由 scripts/build_industry_chain_graph.mjs 从 GICS 数据集自动生成。
- * 数据源：gics_local_site_v9/extensions/<gics>/<chain>_对外版.md
- * 不要手工编辑此文件，重新运行脚本即可刷新。
  *
- * 节点字段：{ id, name, children? }
+ * 数据源：gics_local_site_v9/extensions/<gics>/<chain>_对外版.md
+ * 一个对外版文件 = 一个主产业球，markdown # 是产业链名，## ### #### 是嵌套子节点。
+ *
+ * 不要手工编辑此文件，重新运行脚本即可刷新。
  */
 
-export const industryChainGraphData = ${emit(out, 0)}
+export const industryChainGraphData = ${emit(graph, 0)}
+
+export const sectorList = ${emit(sectorList, 0)}
 `
 
 writeFileSync(OUT, banner)
 console.log('wrote', OUT, 'size:', readFileSync(OUT).length, 'bytes')
+console.log('total sectors (chains):', sectorEntries.length)
 
-// Stats
-let totalChains = 0
-for (const sector of SECTOR_LAYOUT) {
-  const sectorOut = out[sector.key] || {}
-  let chains = 0
-  for (const axis of ['upstream', 'midstream', 'downstream']) {
-    chains += (sectorOut[axis]?.root?.children || []).length
-  }
-  totalChains += chains
-  console.log(`  ${sector.code} ${sector.name.padEnd(8)} chains=${chains}`)
+// 按大类统计
+const byGroup = {}
+for (const s of sectorEntries) {
+  const g = s.gicsCode.slice(0, 2)
+  byGroup[g] = (byGroup[g] || 0) + 1
 }
-console.log('total chains:', totalChains)
+for (const g of Object.keys(byGroup).sort()) {
+  console.log(`  ${g}xx: ${byGroup[g]} 球`)
+}
