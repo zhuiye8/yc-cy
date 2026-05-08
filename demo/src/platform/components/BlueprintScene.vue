@@ -8,22 +8,41 @@
     >
       <span>{{ labelTooltip.level }}</span>
       <strong>{{ labelTooltip.title }}</strong>
+      <em v-if="labelTooltip.meta">{{ labelTooltip.meta }}</em>
     </div>
 
     <!-- 左上：产业链快速切换面板 -->
     <nav class="blueprint-sector-menu" aria-label="产业链切换">
-      <div class="blueprint-sector-menu-title">产业切换</div>
-      <button
-        v-for="entry in sectorMenu"
-        :key="entry.dataKey"
-        type="button"
-        :class="['blueprint-sector-menu-item', { 'is-active': activeSectorKey === entry.dataKey }]"
-        :style="{ '--accent': entry.colorHex }"
-        @click="onSectorMenuClick(entry)"
-      >
-        <span class="blueprint-sector-menu-dot"></span>
-        <span class="blueprint-sector-menu-name">{{ entry.name }}</span>
-      </button>
+      <!-- 静态头部：标题 + 快速跳转 chip（不参与下方滚动） -->
+      <div class="blueprint-sector-menu-header">
+        <div class="blueprint-sector-menu-title">产业切换</div>
+        <div class="blueprint-sector-menu-jumps" aria-label="按大类跳转">
+          <button
+            v-for="cat in categoryJumps"
+            :key="cat.key"
+            type="button"
+            class="blueprint-jump-chip"
+            :style="{ '--accent': cat.colorHex }"
+            :title="`${cat.name} · ${cat.count} 条`"
+            @click="onJumpToCategory(cat.key)"
+          >{{ cat.shortName }}</button>
+        </div>
+      </div>
+      <!-- 可滚动的菜单列表 -->
+      <div class="blueprint-sector-menu-list">
+        <button
+          v-for="entry in sectorMenu"
+          :key="entry.dataKey"
+          type="button"
+          :data-group-key="entry.groupKey"
+          :class="['blueprint-sector-menu-item', { 'is-active': activeSectorKey === entry.dataKey }]"
+          :style="{ '--accent': entry.colorHex }"
+          @click="onSectorMenuClick(entry)"
+        >
+          <span class="blueprint-sector-menu-dot"></span>
+          <span class="blueprint-sector-menu-name">{{ entry.name }}</span>
+        </button>
+      </div>
     </nav>
 
     <div class="blueprint-hud">
@@ -41,7 +60,7 @@
         <span><i class="blueprint-dot" style="color:#fff4c4"></i>脉冲</span>
       </div>
       <div class="blueprint-actions">
-        <span>Esc 重置</span>
+        <span>Esc 重置/返回上一级</span>
         <button type="button" @click="onReset">返回总览</button>
         <button type="button" class="blueprint-back" @click="emit('exit')">← 返回首页</button>
       </div>
@@ -76,6 +95,7 @@ const labelTooltip = reactive({
   y: 0,
   title: '',
   level: '',
+  meta: '',
   accent: '#86e4ff'
 })
 
@@ -87,7 +107,32 @@ const sectorMenu = sectorList.map((s) => ({
   name: s.name,
   dataKey: s.dataKey,
   colorHex: s.colorHex,
+  groupKey: s.groupKey,
 }))
+
+// 顶部快速跳转 chip：按 groupKey 去重，保持原始顺序
+const categoryJumps = (() => {
+  const seen = new Set()
+  const jumps = []
+  for (const s of sectorList) {
+    if (seen.has(s.groupKey)) continue
+    seen.add(s.groupKey)
+    jumps.push({
+      key: s.groupKey,
+      name: s.groupName,
+      shortName: s.groupShort,
+      colorHex: s.colorHex,
+      count: sectorList.filter(x => x.groupKey === s.groupKey).length,
+    })
+  }
+  return jumps
+})()
+
+function onJumpToCategory(groupKey) {
+  const el = document.querySelector(`.blueprint-sector-menu-item[data-group-key="${groupKey}"]`)
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 const activeSectorKey = ref(null)
 let selectSectorByKeyFn = () => {}
 function onSectorMenuClick(entry) {
@@ -135,7 +180,7 @@ onMounted(() => {
     mipmapBlur: true,
     luminanceThreshold: 0.18,
     luminanceSmoothing: 0.24,
-    intensity: 2.4
+    intensity: 1.4
   })
   bloomEffect.ignoreBackground = true
 
@@ -471,15 +516,25 @@ onMounted(() => {
     return group
   }
 
+  // 3 点用二次 Bezier（端点严格贴节点不过冲），4+ 点用 CatmullRom（多控制点平滑）
+  function makeChainCurve(points) {
+    if (points.length === 3) {
+      return new THREE.QuadraticBezierCurve3(points[0], points[1], points[2])
+    }
+    return new THREE.CatmullRomCurve3(points)
+  }
+
   function buildGrowthLine(points, color, opacity = 0.92, tubeRadius = 0.025) {
-    const curve = new THREE.CatmullRomCurve3(points)
-    const tubularSegments = 120
-    const radialSegments = 6
-    const geometry = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false)
+    const curve = makeChainCurve(points)
+    const tubularSegments = 160
+    const radialSegments = 14
     const indicesPerRing = radialSegments * 6
-    geometry.setDrawRange(0, 0)
+
+    // 内核：现有亮线，进 bloom 选区
+    const coreGeo = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false)
+    coreGeo.setDrawRange(0, 0)
     const tube = new THREE.Mesh(
-      geometry,
+      coreGeo,
       new THREE.MeshBasicMaterial({
         color,
         transparent: true,
@@ -489,18 +544,36 @@ onMounted(() => {
       })
     )
     bloomEffect.selection.add(tube)
+
+    // 外层 halo：同曲线、半径 ×2.5、低透明，不进 bloom（纯软光晕）
+    const haloGeo = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius * 2.5, radialSegments, false)
+    haloGeo.setDrawRange(0, 0)
+    const halo = new THREE.Mesh(
+      haloGeo,
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: opacity * 0.22,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    )
+    chainGroup.add(halo)
+
     const head = new THREE.Mesh(
       new THREE.SphereGeometry(0.12, 16, 16),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })
     )
     chainGroup.add(head)
-    return { curve, line: tube, head, tubularSegments, indicesPerRing }
+    return { curve, line: tube, halo, head, tubularSegments, indicesPerRing }
   }
 
   function updateGrowth(lineObject, progress) {
     const clamped = THREE.MathUtils.clamp(progress, 0, 1)
     const rings = Math.floor(lineObject.tubularSegments * clamped)
-    lineObject.line.geometry.setDrawRange(0, rings * lineObject.indicesPerRing)
+    const drawCount = rings * lineObject.indicesPerRing
+    lineObject.line.geometry.setDrawRange(0, drawCount)
+    if (lineObject.halo?.geometry) lineObject.halo.geometry.setDrawRange(0, drawCount)
     lineObject.head.position.copy(lineObject.curve.getPoint(Math.max(0.001, clamped)))
     lineObject.head.visible = clamped > 0.001 && clamped < 0.995
   }
@@ -546,7 +619,8 @@ onMounted(() => {
     const data = sector.userData.data
     const growthDir = new THREE.Vector3(1, 0.03, -0.14).normalize()
     const sideDir = new THREE.Vector3(0, 1, 0)
-    const center = new THREE.Vector3(-2.65, 0.12, 1.02)
+    // 主产业球聚焦时被推到 (-4.1, 0.18, 1.2)（见 focusSector），让链路从这里发起，省掉中间多余的 orb
+    const center = new THREE.Vector3(-4.1, 0.18, 1.2)
     // main 链 3 段（上/中/下）→ 4 个点
     const mainPoints = [
       center,
@@ -557,14 +631,6 @@ onMounted(() => {
 
     const mainLine = buildGrowthLine(mainPoints, data.color, 0.95)
     chainGroup.add(mainLine.line)
-
-    const centerOrb = new THREE.Mesh(
-      new THREE.SphereGeometry(0.34, 24, 24),
-      new THREE.MeshBasicMaterial({ color: data.color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })
-    )
-    centerOrb.position.copy(center)
-    chainGroup.add(centerOrb)
-    bloomEffect.selection.add(centerOrb)
 
     const nodes = data.chain.main.map((label, index) => {
       const node = createNode(label, data.color.clone().lerp(new THREE.Color(0xffffff), 0.2), 0.4 + index * 0.04, {
@@ -622,7 +688,7 @@ onMounted(() => {
       })
     })
 
-    activeChain = { center, centerOrb, growthDir, sideDir, mainLine, nodes, branchLines, branchNodes }
+    activeChain = { center, growthDir, sideDir, mainLine, nodes, branchLines, branchNodes }
     updateGrowth(mainLine, 0.001)
     branchLines.forEach((line) => updateGrowth(line, 0.001))
     return activeChain
@@ -646,27 +712,31 @@ onMounted(() => {
     shockWaveEffect.explode()
     sceneState.pulse = 1
     gsap.fromTo(sceneState, { pulse: 1 }, { pulse: 0, duration: 1.6, ease: 'power2.out' })
-    if (activeChain?.centerOrb) {
-      activeChain.centerOrb.material.color.copy(color)
-      gsap.fromTo(activeChain.centerOrb.scale, { x: 0.3, y: 0.3, z: 0.3 }, { x: 3.4, y: 3.4, z: 3.4, duration: 0.8, ease: 'power2.out' })
-      gsap.fromTo(activeChain.centerOrb.material, { opacity: 1 }, { opacity: 0.05, duration: 0.8, ease: 'power2.out' })
-    }
   }
 
   // ── 点击 L1 后子树展开（L2 / L3 / L4） ─────────────────────────────────────
-  // 子树连线（与 buildGrowthLine 接口兼容，head 挂在指定 parent）
+  // 子树连线（与 buildGrowthLine 接口兼容，head/halo 挂在指定 parent）
   function buildSubtreeGrowthLine(points, color, parent, tubeRadius = 0.012) {
-    const curve = new THREE.CatmullRomCurve3(points)
-    const tubularSegments = 80
-    const radialSegments = 6
-    const geometry = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false)
+    const curve = makeChainCurve(points)
+    const tubularSegments = 110
+    const radialSegments = 12
     const indicesPerRing = radialSegments * 6
-    geometry.setDrawRange(0, 0)
-    const tube = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+
+    const coreGeo = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false)
+    coreGeo.setDrawRange(0, 0)
+    const tube = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({
       color, transparent: true, opacity: 0.85,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }))
     bloomEffect.selection.add(tube)
+
+    const haloGeo = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius * 2.5, radialSegments, false)
+    haloGeo.setDrawRange(0, 0)
+    const halo = new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.85 * 0.22,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }))
+
     const head = new THREE.Mesh(
       new THREE.SphereGeometry(Math.max(0.05, tubeRadius * 5), 12, 12),
       new THREE.MeshBasicMaterial({
@@ -676,8 +746,9 @@ onMounted(() => {
     )
     head.visible = false
     parent.add(tube)
+    parent.add(halo)
     parent.add(head)
-    return { curve, line: tube, head, tubularSegments, indicesPerRing }
+    return { curve, line: tube, halo, head, tubularSegments, indicesPerRing }
   }
 
   function activateChildNode(node, scaleTarget = 1) {
@@ -769,9 +840,9 @@ onMounted(() => {
         const labelOffset = radialDir.clone().multiplyScalar(radialPush)
           .add(new THREE.Vector3(0, yLift, 0))
         const node = createNode(data.name, color.clone(), scale, {
-          maxLength: level === 2 ? 8 : 6,
-          fontSize: level === 2 ? 32 : 28,
-          labelScale: level === 2 ? 0.50 : 0.40,
+          maxLength: 8,
+          fontSize: 32,
+          labelScale: 0.50,
           labelOffset,
           levelLabel: `L${level}`
         })
@@ -779,6 +850,10 @@ onMounted(() => {
         node.userData.nodeData = data
         node.userData.subtreeLevel = level
         node.userData.l1LocalPos = l1Pos.clone()
+        // L3 节点（###）去掉光环，跟 L2 拉开视觉差异 + 减少密集时的视觉噪声
+        if (level === 3 && node.userData.ring) {
+          node.userData.ring.visible = false
+        }
         parent.add(node)
         placedNodes.push(node)
 
@@ -898,10 +973,15 @@ onMounted(() => {
     })
     lines.forEach((lo) => {
       if (lo.line?.geometry?.setDrawRange) lo.line.geometry.setDrawRange(0, 0)
+      if (lo.halo?.geometry?.setDrawRange) lo.halo.geometry.setDrawRange(0, 0)
       if (lo.head) lo.head.visible = false
       if (lo.line?.material) {
         gsap.killTweensOf(lo.line.material)
         lo.line.material.opacity = 0.85
+      }
+      if (lo.halo?.material) {
+        gsap.killTweensOf(lo.halo.material)
+        lo.halo.material.opacity = 0.85 * 0.22
       }
     })
 
@@ -961,9 +1041,14 @@ onMounted(() => {
           opacity: 0, duration: 0.24, ease: 'power2.in',
           onComplete: () => {
             if (lo.line?.geometry?.setDrawRange) lo.line.geometry.setDrawRange(0, 0)
+            if (lo.halo?.geometry?.setDrawRange) lo.halo.geometry.setDrawRange(0, 0)
             if (lo.head) lo.head.visible = false
           }
         })
+      }
+      if (lo.halo?.material) {
+        gsap.killTweensOf(lo.halo.material)
+        gsap.to(lo.halo.material, { opacity: 0, duration: 0.24, ease: 'power2.in' })
       }
     })
   }
@@ -1007,10 +1092,18 @@ onMounted(() => {
       gsap.killTweensOf(activeChain.mainLine.line.material)
       gsap.to(activeChain.mainLine.line.material, { opacity: dim ? 0.18 : 0.85, duration: 0.32 })
     }
+    if (activeChain.mainLine?.halo?.material) {
+      gsap.killTweensOf(activeChain.mainLine.halo.material)
+      gsap.to(activeChain.mainLine.halo.material, { opacity: (dim ? 0.18 : 0.85) * 0.22, duration: 0.32 })
+    }
     activeChain.branchLines.forEach((lo) => {
       if (lo.line?.material) {
         gsap.killTweensOf(lo.line.material)
         gsap.to(lo.line.material, { opacity: dim ? 0.14 : 0.62, duration: 0.32 })
+      }
+      if (lo.halo?.material) {
+        gsap.killTweensOf(lo.halo.material)
+        gsap.to(lo.halo.material, { opacity: (dim ? 0.14 : 0.62) * 0.22, duration: 0.32 })
       }
     })
   }
@@ -1064,7 +1157,7 @@ onMounted(() => {
         if (lvl === 2) dimmed = (node !== focusedL2Node)
         else dimmed = (node.parent !== focusedL2Node)
       }
-      setSubtreeNodeOpacity(node, dimmed ? 0.16 : 0.92)
+      setSubtreeNodeOpacity(node, dimmed ? 0.02 : 0.92)
     }
   }
 
@@ -1312,6 +1405,38 @@ onMounted(() => {
     return '节点'
   }
 
+  // 鼠标悬浮时附加的信息：GICS 编号 / 段数 / 子项数，让用户对深度有预期
+  function getOwnerMeta(owner) {
+    if (!owner) return ''
+    const ud = owner.userData
+
+    // 主产业球（sector）：从 sectorList + industryChainGraphData 取 GICS 码 + 总段/子项
+    if (ud?.data?.dataKey) {
+      const sec = sectorList.find((s) => s.dataKey === ud.data.dataKey)
+      if (!sec) return ''
+      const graph = industryChainGraphData[sec.dataKey] || {}
+      let segCount = 0
+      let subCount = 0
+      for (const ax of ['upstream', 'midstream', 'downstream']) {
+        const children = graph[ax]?.root?.children || []
+        segCount += children.length
+        for (const ch of children) subCount += (ch.children?.length || 0)
+      }
+      return `GICS ${sec.gicsCode} · ${segCount} 段 · ${subCount} 项`
+    }
+
+    // L1 分支 / L2 / L3 ：用 nodeData 计 immediate + 子代数
+    if (ud?.nodeData) {
+      const children = ud.nodeData.children || []
+      if (!children.length) return ''
+      let leaf = 0
+      for (const ch of children) leaf += (ch.children?.length || 0)
+      return leaf > 0 ? `${children.length} 段 · ${leaf} 子项` : `${children.length} 项`
+    }
+
+    return ''
+  }
+
   function showLabelTooltip(owner, event) {
     const title = getOwnerTitle(owner)
     if (!title) {
@@ -1325,6 +1450,7 @@ onMounted(() => {
     labelTooltip.y = Math.min(Math.max(event.clientY - rect.top + 18, 18), Math.max(18, rect.height - 112))
     labelTooltip.title = title
     labelTooltip.level = getOwnerLevel(owner)
+    labelTooltip.meta = getOwnerMeta(owner)
     labelTooltip.accent = color?.isColor ? colorToCss(color, 1) : '#86e4ff'
   }
 
@@ -1467,8 +1593,6 @@ onMounted(() => {
     camera.lookAt(lookTargetProxy)
 
     if (activeChain) {
-      activeChain.centerOrb.material.opacity = 0.2 + sceneState.pulse * 0.8
-      activeChain.centerOrb.scale.setScalar(1 + sceneState.pulse * 2.2)
       activeChain.nodes.concat(activeChain.branchNodes).forEach((node, index) => {
         // 主链/分支节点只漂浮，不旋转
         if (node === focusedBranchNode) return
@@ -1591,6 +1715,17 @@ onBeforeUnmount(() => cleanup())
   text-shadow: 0 0 12px rgba(134, 228, 255, 0.26);
 }
 
+.blueprint-node-tooltip em {
+  display: block;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(134, 228, 255, 0.16);
+  font-size: 11px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  color: rgba(170, 220, 250, 0.78);
+}
+
 .blueprint-hud {
   position: absolute;
   top: 20px;
@@ -1605,8 +1740,8 @@ onBeforeUnmount(() => cleanup())
   top: 20px;
   left: 20px;
   z-index: 6;
-  width: 158px;
-  max-height: calc(100vh - 80px);
+  width: 178px;
+  max-height: calc(50vh - 40px);
   padding: 12px 12px 10px;
   border-radius: 16px;
   border: 1px solid rgba(133, 205, 255, 0.2);
@@ -1615,37 +1750,74 @@ onBeforeUnmount(() => cleanup())
   box-shadow: 0 0 28px rgba(25, 96, 180, 0.16);
   font-family: "Segoe UI", "PingFang SC", sans-serif;
   pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.blueprint-sector-menu-header {
+  flex: 0 0 auto;
+}
+.blueprint-sector-menu-list {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding-right: 2px;
   scrollbar-width: thin;
   scrollbar-color: rgba(133, 205, 255, 0.35) transparent;
 }
-.blueprint-sector-menu::-webkit-scrollbar {
+.blueprint-sector-menu-list::-webkit-scrollbar {
   width: 6px;
 }
-.blueprint-sector-menu::-webkit-scrollbar-track {
+.blueprint-sector-menu-list::-webkit-scrollbar-track {
   background: transparent;
 }
-.blueprint-sector-menu::-webkit-scrollbar-thumb {
+.blueprint-sector-menu-list::-webkit-scrollbar-thumb {
   background: rgba(133, 205, 255, 0.32);
   border-radius: 3px;
 }
-.blueprint-sector-menu::-webkit-scrollbar-thumb:hover {
+.blueprint-sector-menu-list::-webkit-scrollbar-thumb:hover {
   background: rgba(133, 205, 255, 0.55);
 }
 .blueprint-sector-menu-title {
-  position: sticky;
-  top: -12px;
-  margin: -12px -12px 4px;
-  padding: 12px 16px 8px;
-  background: linear-gradient(to bottom, rgba(8, 14, 26, 0.95) 70%, rgba(8, 14, 26, 0.0));
+  margin: 0 0 6px;
+  padding: 0 4px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.22em;
   color: rgba(150, 200, 240, 0.78);
-  z-index: 1;
+}
+.blueprint-sector-menu-jumps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid rgba(133, 205, 255, 0.18);
+}
+.blueprint-jump-chip {
+  min-width: 0;
+  padding: 5px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 16%, rgba(8, 14, 26, 0.6));
+  color: rgba(232, 246, 255, 0.92);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.12s ease;
+}
+.blueprint-jump-chip:hover {
+  background: color-mix(in srgb, var(--accent) 36%, rgba(8, 14, 26, 0.6));
+  transform: translateY(-1px);
+}
+.blueprint-jump-chip:active {
+  transform: translateY(0);
 }
 .blueprint-sector-menu-item {
   width: 100%;
