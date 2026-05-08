@@ -26,6 +26,7 @@ demo/assets/extracted/*
 !demo/assets/extracted/home_hero_poster.jpg
 !demo/assets/extracted/home_intro_photo.jpg
 !demo/assets/extracted/home_partner_*.png
+!demo/assets/extracted/query_detail_bg.png
 !demo/assets/extracted/query_hero_bg.jpg
 !demo/assets/extracted/query_icon_*.png
 !demo/assets/extracted/query_main_clean.png

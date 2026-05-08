@@ -121,6 +121,19 @@ function updateHomeFeatureLayout() {
   updateHomeCalibrationReadout();
 }
 
+function syncQueryDetailHeight() {
+  const queryView = document.getElementById("queryView");
+  if (!queryView?.classList.contains("is-active")) return;
+
+  const queryReal = queryView.querySelector(".query-real");
+  const content = queryView.querySelector(".query-detail-content");
+  const activePanel = queryView.querySelector(".query-detail-page.is-active");
+  if (!queryReal || !content || !activePanel) return;
+
+  const minHeight = Math.ceil(content.offsetTop + activePanel.scrollHeight + 120);
+  queryReal.style.minHeight = `${Math.max(window.innerHeight, minHeight)}px`;
+}
+
 function activate(targetId) {
   views.forEach((view) => {
     view.classList.toggle("is-active", view.id === targetId);
@@ -140,6 +153,10 @@ function activate(targetId) {
   window.setTimeout(() => {
     isAutoSnappingHome = false;
   }, 120);
+
+  if (targetId === "queryView") {
+    requestAnimationFrame(syncQueryDetailHeight);
+  }
 }
 
 function showToast(message) {
@@ -177,14 +194,39 @@ document.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("scroll", scheduleHomeSnap, { passive: true });
-window.addEventListener("resize", updateHomeFeatureLayout);
+window.addEventListener("resize", () => {
+  updateHomeFeatureLayout();
+  syncQueryDetailHeight();
+});
 updateHomeFeatureLayout();
+
+let activeQueryPanel = document.querySelector(".query-detail-page.is-active")?.dataset.queryPanel || "org";
 
 document.querySelectorAll(".query-side-item").forEach((button) => {
   button.addEventListener("click", () => {
+    const queryType = button.dataset.queryType;
+    const targetPanel = queryType
+      ? document.querySelector(`.query-detail-page[data-query-panel="${queryType}"]`)
+      : null;
+
     document.querySelectorAll(".query-side-item").forEach((item) => {
       item.classList.toggle("is-active", item === button);
     });
+
+    if (!targetPanel) {
+      document.querySelectorAll(".query-detail-page").forEach((panel) => {
+        panel.classList.toggle("is-active", panel.dataset.queryPanel === activeQueryPanel);
+      });
+      showToast("该类型详情页待接入");
+      return;
+    }
+
+    activeQueryPanel = queryType;
+    document.querySelectorAll(".query-detail-page").forEach((panel) => {
+      panel.classList.toggle("is-active", panel === targetPanel);
+    });
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    requestAnimationFrame(syncQueryDetailHeight);
   });
 });
 
@@ -193,7 +235,7 @@ document.querySelectorAll(".ai-menu-real button").forEach((button) => {
     document.querySelectorAll(".ai-menu-real button").forEach((item) => {
       item.classList.toggle("is-active", item === button);
     });
-    showToast(button.dataset.aiMenu === "favorite" ? "已切换到收藏夹" : "已切换到对话");
+    showToast(button.dataset.aiMenu === "favorite" ? "已切换到收藏" : "已切换到历史记录");
   });
 });
 
@@ -215,7 +257,7 @@ document.querySelector(".ai-new-real")?.addEventListener("click", () => {
   const button = document.querySelector(".ai-new-real");
   button?.classList.add("is-flashing");
   setTimeout(() => button?.classList.remove("is-flashing"), 500);
-  showToast("已新建空白对话");
+  showToast("已新建对话");
 });
 
 document.querySelectorAll(".ai-suggestions button").forEach((button) => {
@@ -231,9 +273,9 @@ document.querySelectorAll(".ai-suggestions button").forEach((button) => {
 document.querySelector(".ai-send-real")?.addEventListener("click", () => {
   const input = document.querySelector(".ai-composer-real input");
   if (input && input.value.trim()) {
-    showToast("演示模式：消息已记录");
+    showToast("消息已加入模拟对话");
     input.value = "";
   } else {
-    showToast("请输入消息");
+    showToast("请输入问题后发送");
   }
 });
