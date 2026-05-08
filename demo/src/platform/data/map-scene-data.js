@@ -145,9 +145,72 @@ const yangzhouDetails = {
   ]),
 }
 
+const detailOverrides = {
+  '420100': wuhanDetails,
+  '321000': yangzhouDetails,
+}
+
+const mockDetailCache = new Map()
+
+function hashCode(value) {
+  return String(value).split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+}
+
+function metricFor(code, salt, min = 72, span = 25) {
+  return min + ((hashCode(code) + salt * 17) % span)
+}
+
+function trendFor(code, salt) {
+  return `+${4 + ((hashCode(code) + salt * 7) % 11)}%`
+}
+
+function buildMockCategory(cityCode, category, cityName) {
+  const code = String(cityCode)
+  const templates = {
+    Talent: [
+      { name: '\u4eba\u624d\u8282\u70b9 A', title: '\u533a\u57df\u5173\u952e\u6280\u672f\u5e26\u5934\u4eba', subtitle: '\u9ad8\u6821\u4e0e\u4ea7\u4e1a\u7814\u53d1\u534f\u540c\u56e2\u961f', tags: ['\u4eba\u624d\u96c6\u805a', '\u9879\u76ee\u534f\u540c'] },
+      { name: '\u4eba\u624d\u8282\u70b9 B', title: '\u4ea7\u4e1a\u7b97\u6cd5\u8f6c\u5316\u4e13\u5bb6', subtitle: '\u533a\u57df\u521b\u65b0\u5e73\u53f0\u6838\u5fc3\u6210\u5458', tags: ['\u7b97\u6cd5\u7814\u53d1', '\u6210\u679c\u8f6c\u5316'] },
+      { name: '\u4eba\u624d\u8282\u70b9 C', title: '\u6570\u636e\u667a\u80fd\u5e94\u7528\u9aa8\u5e72', subtitle: '\u4f01\u4e1a\u8054\u5408\u5b9e\u9a8c\u5ba4\u8d1f\u8d23\u4eba', tags: ['\u4f01\u4e1a\u5bfc\u5e08', '\u4e13\u5229\u534f\u540c'] },
+    ],
+    Enterprise: [
+      { name: '\u4f01\u4e1a\u8282\u70b9 A', title: '\u667a\u80fd\u5236\u9020\u94fe\u4e3b\u4f01\u4e1a', subtitle: '\u627f\u63a5\u533a\u57df\u4ea7\u4e1a\u534f\u540c\u4e0e\u8bbe\u5907\u5347\u7ea7', tags: ['\u94fe\u4e3b\u4f01\u4e1a', '\u4ea7\u4e1a\u534f\u540c'] },
+      { name: '\u4f01\u4e1a\u8282\u70b9 B', title: '\u6570\u5b57\u5316\u5e73\u53f0\u670d\u52a1\u5546', subtitle: '\u805a\u5408\u672c\u5730\u6570\u636e\u3001\u4eba\u624d\u548c\u4e13\u5229\u8d44\u6e90', tags: ['\u6570\u5b57\u5e73\u53f0', '\u8d44\u6e90\u805a\u5408'] },
+      { name: '\u4f01\u4e1a\u8282\u70b9 C', title: '\u4e13\u7cbe\u7279\u65b0\u6f5c\u529b\u4f01\u4e1a', subtitle: '\u4e13\u5229\u6d3b\u8dc3\u5ea6\u4e0e\u5408\u4f5c\u9891\u6b21\u6301\u7eed\u63d0\u5347', tags: ['\u4e13\u7cbe\u7279\u65b0', '\u5408\u4f5c\u7f51\u7edc'] },
+    ],
+    Paper: [
+      { name: '\u8bba\u6587\u96c6 A', title: '\u533a\u57df\u667a\u80fd\u4ea7\u4e1a\u534f\u540c\u7f51\u7edc\u7814\u7a76', subtitle: '\u56f4\u7ed5\u4eba\u624d\u3001\u4f01\u4e1a\u4e0e\u6210\u679c\u8f6c\u5316\u5173\u7cfb\u5efa\u6a21', tags: ['\u534f\u540c\u7f51\u7edc', '\u77e5\u8bc6\u56fe\u8c31'] },
+      { name: '\u8bba\u6587\u96c6 B', title: '\u6570\u636e\u9a71\u52a8\u7684\u4ea7\u4e1a\u521b\u65b0\u70ed\u70b9\u8bc6\u522b\u65b9\u6cd5', subtitle: '\u7ed3\u5408\u4e13\u5229\u3001\u8bba\u6587\u4e0e\u9879\u76ee\u7684\u591a\u6e90\u6570\u636e', tags: ['\u70ed\u70b9\u8bc6\u522b', '\u591a\u6e90\u6570\u636e'] },
+      { name: '\u8bba\u6587\u96c6 C', title: '\u79d1\u6280\u6210\u679c\u8f6c\u5316\u6548\u7387\u8bc4\u4f30\u6a21\u578b', subtitle: '\u9762\u5411\u57ce\u5e02\u7ea7\u8282\u70b9\u7684\u6001\u52bf\u5206\u6790', tags: ['\u8f6c\u5316\u6548\u7387', '\u6001\u52bf\u5206\u6790'] },
+    ],
+    Patent: [
+      { name: '\u4e13\u5229\u7c07 A', title: '\u9762\u5411\u667a\u80fd\u88c5\u5907\u7684\u5173\u952e\u90e8\u4ef6\u63a7\u5236\u65b9\u6cd5', subtitle: '\u7533\u8bf7\u4e3b\u4f53\u8986\u76d6\u9ad8\u6821\u4e0e\u9aa8\u5e72\u4f01\u4e1a', tags: ['\u53d1\u660e\u4e13\u5229', '\u667a\u80fd\u88c5\u5907'] },
+      { name: '\u4e13\u5229\u7c07 B', title: '\u4ea7\u4e1a\u77e5\u8bc6\u56fe\u8c31\u9a71\u52a8\u7684\u9884\u8b66\u7cfb\u7edf', subtitle: '\u7528\u4e8e\u8bc6\u522b\u533a\u57df\u6280\u672f\u673a\u4f1a\u548c\u7ade\u4e89\u98ce\u9669', tags: ['\u9884\u8b66\u7cfb\u7edf', '\u77e5\u8bc6\u56fe\u8c31'] },
+      { name: '\u4e13\u5229\u7c07 C', title: '\u591a\u7ef4\u6570\u636e\u878d\u5408\u7684\u4f01\u4e1a\u521b\u65b0\u8bc4\u4f30\u88c5\u7f6e', subtitle: '\u652f\u6491\u4ea7\u4e1a\u8282\u70b9\u6d3b\u8dc3\u5ea6\u91cf\u5316', tags: ['\u521b\u65b0\u8bc4\u4f30', '\u8282\u70b9\u6d3b\u8dc3'] },
+    ],
+  }
+
+  return buildItems(code, category, templates[category].map((item, index) => ({
+    ...item,
+    name: `${cityName}${item.name}`,
+    subtitle: `${cityName} - ${item.subtitle}`,
+    value: metricFor(code, index + FILTERS.indexOf(category) * 3),
+    trend: trendFor(code, index + FILTERS.indexOf(category) * 5),
+  })))
+}
+
+function buildMockDetails(cityCode) {
+  const code = String(cityCode)
+  if (mockDetailCache.has(code)) return mockDetailCache.get(code)
+  const meta = getLocationMeta(code)
+  const cityName = meta?.name || `\u533a\u57df${code}`
+  const details = Object.fromEntries(FILTERS.map((category) => [category, buildMockCategory(code, category, cityName)]))
+  mockDetailCache.set(code, details)
+  return details
+}
+
 export function getDetailItems(cityCode, category) {
   const key = String(cityCode)
-  const cityItems = key === '321000' ? yangzhouDetails : key === '420100' ? wuhanDetails : null
+  const cityItems = detailOverrides[key] || buildMockDetails(key)
   return cityItems?.[category] || []
 }
 

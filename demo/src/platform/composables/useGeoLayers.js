@@ -30,9 +30,21 @@ const PROVINCE_HIGHLIGHT_STYLE = {
   sideOpacity: 0.38, sideEmissiveIntensity: 0.4,
 }
 
-const HIGHLIGHTED_PROVINCE_CODES = new Set(['320000', '420000'])
+const HIGHLIGHTED_PROVINCE_CODES = new Set(
+  chinaGeo.features.map((feature) => String(feature.properties?.adcode || '')).filter(Boolean),
+)
 // 每个高亮省下对应的高亮城市 adcode（武汉、扬州）
-const HIGHLIGHTED_CITY_BY_PROVINCE = { '320000': '321000', '420000': '420100' }
+// Local mock fallback: pick one representative child node for every province.
+const HIGHLIGHTED_CITY_BY_PROVINCE = Object.fromEntries(
+  chinaGeo.features
+    .map((feature) => {
+      const code = String(feature.properties?.adcode || '')
+      const children = getProvinceChildren(code)
+      const primary = children.find((item) => item.level === 'city') || children[0]
+      return primary ? [code, String(primary.adcode)] : null
+    })
+    .filter(Boolean),
+)
 const HIGHLIGHTED_CITY_CODES = new Set(Object.values(HIGHLIGHTED_CITY_BY_PROVINCE))
 
 function getProvinceBaseStyle(code) {
