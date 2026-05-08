@@ -127,11 +127,48 @@ function syncQueryDetailHeight() {
 
   const queryReal = queryView.querySelector(".query-real");
   const content = queryView.querySelector(".query-detail-content");
+  if (!queryReal || !content) return;
+
+  if (content.classList.contains("is-search-mode")) {
+    queryReal.style.minHeight = `${Math.max(window.innerHeight, 1363)}px`;
+    return;
+  }
+
   const activePanel = queryView.querySelector(".query-detail-page.is-active");
-  if (!queryReal || !content || !activePanel) return;
+  if (!activePanel) return;
 
   const minHeight = Math.ceil(content.offsetTop + activePanel.scrollHeight + 120);
   queryReal.style.minHeight = `${Math.max(window.innerHeight, minHeight)}px`;
+}
+
+function showQuerySearchMode() {
+  const queryView = document.getElementById("queryView");
+  const content = queryView?.querySelector(".query-detail-content");
+  if (!content) return;
+
+  content.classList.add("is-search-mode");
+  queryView.querySelectorAll(".query-detail-page").forEach((panel) => {
+    panel.classList.remove("is-active");
+  });
+  requestAnimationFrame(syncQueryDetailHeight);
+}
+
+function showQueryDetailPanel(queryType) {
+  const queryView = document.getElementById("queryView");
+  const content = queryView?.querySelector(".query-detail-content");
+  const targetPanel = queryType
+    ? queryView?.querySelector(`.query-detail-page[data-query-panel="${queryType}"]`)
+    : null;
+
+  if (!content || !targetPanel) return false;
+
+  content.classList.remove("is-search-mode");
+  queryView.querySelectorAll(".query-detail-page").forEach((panel) => {
+    panel.classList.toggle("is-active", panel === targetPanel);
+  });
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  requestAnimationFrame(syncQueryDetailHeight);
+  return true;
 }
 
 function activate(targetId) {
@@ -155,7 +192,7 @@ function activate(targetId) {
   }, 120);
 
   if (targetId === "queryView") {
-    requestAnimationFrame(syncQueryDetailHeight);
+    showQuerySearchMode();
   }
 }
 
@@ -200,15 +237,12 @@ window.addEventListener("resize", () => {
 });
 updateHomeFeatureLayout();
 
-let activeQueryPanel = document.querySelector(".query-detail-page.is-active")?.dataset.queryPanel || "org";
+let activeQueryPanel = document.querySelector(".query-side-item.is-active")?.dataset.queryType || "org";
 
-document.querySelectorAll(".query-side-item").forEach((button) => {
+document.querySelectorAll(".query-side-item-legacy-disabled").forEach((button) => {
   button.addEventListener("click", () => {
     const queryType = button.dataset.queryType;
-    const targetPanel = queryType
-      ? document.querySelector(`.query-detail-page[data-query-panel="${queryType}"]`)
-      : null;
-
+    const targetPanel = null;
     document.querySelectorAll(".query-side-item").forEach((item) => {
       item.classList.toggle("is-active", item === button);
     });
@@ -228,6 +262,44 @@ document.querySelectorAll(".query-side-item").forEach((button) => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     requestAnimationFrame(syncQueryDetailHeight);
   });
+});
+
+document.querySelectorAll(".query-side-item").forEach((button) => {
+  button.addEventListener(
+    "click",
+    (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      const queryType = button.dataset.queryType;
+      document.querySelectorAll(".query-side-item").forEach((item) => {
+        item.classList.toggle("is-active", item === button);
+      });
+
+      activeQueryPanel = queryType || activeQueryPanel;
+      window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      showQuerySearchMode();
+    },
+    true,
+  );
+});
+
+const querySearchButton = document.querySelector(".query-keyword-row button");
+const querySearchInput = document.querySelector(".query-keyword-row input");
+
+querySearchButton?.addEventListener("click", () => {
+  const queryType = document.querySelector(".query-side-item.is-active")?.dataset.queryType || activeQueryPanel;
+  activeQueryPanel = queryType;
+
+  if (!showQueryDetailPanel(queryType)) {
+    showQuerySearchMode();
+    showToast("期刊详情页暂未接入");
+  }
+});
+
+querySearchInput?.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  querySearchButton?.click();
 });
 
 document.querySelectorAll(".ai-menu-real button").forEach((button) => {
