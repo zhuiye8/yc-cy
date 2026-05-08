@@ -574,7 +574,8 @@ onMounted(() => {
     const data = sector.userData.data
     const growthDir = new THREE.Vector3(1, 0.03, -0.14).normalize()
     const sideDir = new THREE.Vector3(0, 1, 0)
-    const center = new THREE.Vector3(-2.65, 0.12, 1.02)
+    // 主产业球聚焦时被推到 (-4.1, 0.18, 1.2)（见 focusSector），让链路从这里发起，省掉中间多余的 orb
+    const center = new THREE.Vector3(-4.1, 0.18, 1.2)
     // main 链 3 段（上/中/下）→ 4 个点
     const mainPoints = [
       center,
@@ -585,14 +586,6 @@ onMounted(() => {
 
     const mainLine = buildGrowthLine(mainPoints, data.color, 0.95)
     chainGroup.add(mainLine.line)
-
-    const centerOrb = new THREE.Mesh(
-      new THREE.SphereGeometry(0.34, 24, 24),
-      new THREE.MeshBasicMaterial({ color: data.color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })
-    )
-    centerOrb.position.copy(center)
-    chainGroup.add(centerOrb)
-    bloomEffect.selection.add(centerOrb)
 
     const nodes = data.chain.main.map((label, index) => {
       const node = createNode(label, data.color.clone().lerp(new THREE.Color(0xffffff), 0.2), 0.4 + index * 0.04, {
@@ -650,7 +643,7 @@ onMounted(() => {
       })
     })
 
-    activeChain = { center, centerOrb, growthDir, sideDir, mainLine, nodes, branchLines, branchNodes }
+    activeChain = { center, growthDir, sideDir, mainLine, nodes, branchLines, branchNodes }
     updateGrowth(mainLine, 0.001)
     branchLines.forEach((line) => updateGrowth(line, 0.001))
     return activeChain
@@ -674,11 +667,6 @@ onMounted(() => {
     shockWaveEffect.explode()
     sceneState.pulse = 1
     gsap.fromTo(sceneState, { pulse: 1 }, { pulse: 0, duration: 1.6, ease: 'power2.out' })
-    if (activeChain?.centerOrb) {
-      activeChain.centerOrb.material.color.copy(color)
-      gsap.fromTo(activeChain.centerOrb.scale, { x: 0.3, y: 0.3, z: 0.3 }, { x: 3.4, y: 3.4, z: 3.4, duration: 0.8, ease: 'power2.out' })
-      gsap.fromTo(activeChain.centerOrb.material, { opacity: 1 }, { opacity: 0.05, duration: 0.8, ease: 'power2.out' })
-    }
   }
 
   // ── 点击 L1 后子树展开（L2 / L3 / L4） ─────────────────────────────────────
@@ -1527,8 +1515,6 @@ onMounted(() => {
     camera.lookAt(lookTargetProxy)
 
     if (activeChain) {
-      activeChain.centerOrb.material.opacity = 0.2 + sceneState.pulse * 0.8
-      activeChain.centerOrb.scale.setScalar(1 + sceneState.pulse * 2.2)
       activeChain.nodes.concat(activeChain.branchNodes).forEach((node, index) => {
         // 主链/分支节点只漂浮，不旋转
         if (node === focusedBranchNode) return
