@@ -1,3 +1,5 @@
+import { createNavigationController, installNavigationGlobals } from "./shared/navigation.js";
+
 const views = Array.from(document.querySelectorAll(".view"));
 const switchButtons = Array.from(document.querySelectorAll("[data-target]"));
 const floatingButtons = Array.from(document.querySelectorAll(".page-switcher button"));
@@ -25,6 +27,10 @@ const HOME_SNAP_POINTS = [
 
 function isHomeActive() {
   return document.getElementById("homeView")?.classList.contains("is-active");
+}
+
+function getActiveViewId() {
+  return views.find((view) => view.classList.contains("is-active"))?.id || "homeView";
 }
 
 function clampScrollTop(value) {
@@ -149,17 +155,25 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 1800);
 }
 
+const navigation = createNavigationController({
+  activate,
+  getActiveViewId,
+  syncHashOnNavigate: false,
+});
+
+installNavigationGlobals(navigation);
+
 switchButtons.forEach((button) => {
   button.addEventListener("click", () => {
     const target = button.dataset.target;
-    if (target) activate(target);
+    if (target) navigation.navigateToView(target);
   });
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "1") activate("homeView");
-  if (event.key === "2") activate("queryView");
-  if (event.key === "3") activate("aiView");
+  if (event.key === "1") navigation.navigateToView("homeView");
+  if (event.key === "2") navigation.navigateToView("queryView");
+  if (event.key === "3") navigation.navigateToView("aiView");
 });
 
 window.addEventListener("scroll", scheduleHomeSnap, { passive: true });
