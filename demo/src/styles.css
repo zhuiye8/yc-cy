@@ -994,8 +994,8 @@ button {
   top: 0;
   z-index: 4;
   width: 1920px;
-  height: 108px;
-  background: #0b3476;
+  height: 107px;
+  background: #06276a;
 }
 
 .query-top-logo {
@@ -1018,14 +1018,15 @@ button {
 
 .query-tabs {
   position: absolute;
-  left: 433px;
-  top: 40px;
+  left: 484px;
+  top: 43px;
+  isolation: isolate;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  width: 1078px;
-  height: 68px;
-  padding: 0 52px;
-  border-radius: 35px 35px 0 0;
+  width: 982px;
+  height: 64px;
+  padding: 0 46px;
+  border-radius: 48px 48px 0 0;
   background: rgba(255, 255, 255, 0.96);
 }
 
@@ -1034,26 +1035,27 @@ button {
   content: "";
   position: absolute;
   bottom: 0;
-  width: 94px;
-  height: 68px;
-  background: #0b3476;
+  z-index: -1;
+  width: 86px;
+  height: 64px;
+  background: #06276a;
   pointer-events: none;
 }
 
 .query-tabs::before {
-  left: -53px;
-  border-radius: 0 0 58px 0;
+  left: -42px;
+  border-radius: 0 0 54px 0;
 }
 
 .query-tabs::after {
-  right: -53px;
-  border-radius: 0 0 0 58px;
+  right: -42px;
+  border-radius: 0 0 0 54px;
 }
 
 .query-tabs button {
   position: relative;
   z-index: 1;
-  height: 68px;
+  height: 64px;
   color: #606978;
   background: transparent;
   font-size: 22px;
@@ -1062,15 +1064,55 @@ button {
   letter-spacing: 0;
 }
 
+.query-tabs button::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: 128%;
+  height: 100%;
+  border-radius: 999px;
+  background:
+    radial-gradient(
+      ellipse at center,
+      rgba(216, 233, 255, 0.98) 0%,
+      rgba(216, 233, 255, 0.62) 28%,
+      rgba(216, 233, 255, 0.24) 54%,
+      rgba(216, 233, 255, 0) 78%
+    );
+  opacity: 0;
+  transform: translate(-50%, -50%) scaleX(0.18);
+  transition:
+    opacity 0.22s ease,
+    transform 0.28s ease;
+  pointer-events: none;
+}
+
 .query-tabs button + button {
-  border-left: 1px solid #cfd8e2;
+  border-left: 0;
+  background:
+    linear-gradient(#cfd8e2, #cfd8e2) left center / 1px 28px no-repeat;
 }
 
 .query-tabs button.is-active {
+  color: #606978;
+  font-weight: 500;
+}
+
+.query-tabs button:hover,
+.query-tabs button:focus-visible {
   color: #0f66e8;
 }
 
-.query-tabs button.is-active::after {
+.query-tabs button:hover::before,
+.query-tabs button:focus-visible::before {
+  opacity: 1;
+  transform: translate(-50%, -50%) scaleX(1);
+}
+
+.query-tabs button:hover::after,
+.query-tabs button:focus-visible::after {
   content: "";
   position: absolute;
   left: 43px;
@@ -1103,6 +1145,7 @@ button {
 }
 
 .query-about img:nth-of-type(2) {
+  grid-column: 3;
   width: 18px;
   height: 22px;
   filter: invert(1);
@@ -1119,6 +1162,7 @@ button {
 }
 
 .query-about strong {
+  grid-column: 4;
   color: #fff;
   font-size: 22px;
   font-weight: 900;
@@ -1458,7 +1502,8 @@ button {
   background: #f8fbff;
 }
 
-.ai-topbar .query-tabs button.is-active::after {
+.ai-topbar .query-tabs button:hover::after,
+.ai-topbar .query-tabs button:focus-visible::after {
   left: 60px;
   right: 60px;
 }
@@ -2437,15 +2482,21 @@ button {
   --home-hero-h-scaled: 1010px;
   --home-partners-y-scaled: 2358px;
   --home-real-h: 3181px;
-  --topbar-h: clamp(76px, 5.625vw, 108px);
+  --topbar-h: clamp(76px, 5.573vw, 107px);
   --topbar-pad-x: clamp(18px, 2.1vw, 40px);
   --topbar-gap: clamp(14px, 1.65vw, 32px);
-  --topbar-logo-col: clamp(220px, 17vw, 326px);
+  --topbar-logo-x: clamp(24px, 2.08vw, 40px);
+  --topbar-logo-y: clamp(17px, 1.3vw, 25px);
+  --topbar-tabs-x: clamp(318px, 25.2vw, 484px);
+  --topbar-tabs-w: clamp(690px, 51.15vw, 982px);
+  --topbar-tabs-wing: clamp(54px, 4.48vw, 86px);
+  --topbar-tabs-notch: clamp(30px, 2.19vw, 42px);
+  --topbar-action-right: clamp(22px, 1.77vw, 34px);
   --topbar-logo-w: clamp(178px, 11.85vw, 227px);
   --topbar-logo-h: clamp(42px, 2.75vw, 53px);
-  --topbar-tabs-h: clamp(52px, 3.55vw, 68px);
-  --topbar-tabs-pad: clamp(18px, 2.7vw, 52px);
-  --topbar-action-w: clamp(192px, 16.4vw, 315px);
+  --topbar-tabs-h: clamp(48px, 3.333vw, 64px);
+  --topbar-tabs-pad: clamp(22px, 2.4vw, 46px);
+  --topbar-action-w: clamp(220px, 16.4vw, 315px);
   --topbar-action-h: clamp(44px, 3.08vw, 59px);
   --query-sidebar-w: clamp(318px, 22.8vw, 438px);
   --ai-sidebar-w: clamp(304px, 21.7vw, 416px);
@@ -2587,26 +2638,26 @@ body {
 }
 
 .query-topbar {
-  display: grid;
-  grid-template-columns: minmax(196px, var(--topbar-logo-col)) minmax(0, 1fr) minmax(176px, var(--topbar-action-w));
-  align-items: end;
-  column-gap: var(--topbar-gap);
+  display: block;
   width: 100%;
   max-width: none;
   height: var(--topbar-h);
-  padding: 0 var(--topbar-pad-x);
+  padding: 0;
+  background: #06276a;
 }
 
 .top-logo-button {
-  position: relative;
-  left: auto;
-  top: auto;
+  position: absolute;
+  left: 0;
+  top: 0;
   z-index: 6;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
-  width: 100%;
+  width: calc(var(--topbar-tabs-x) - 36px);
   height: var(--topbar-h);
+  padding-left: var(--topbar-logo-x);
+  padding-top: var(--topbar-logo-y);
   background: transparent;
 }
 
@@ -2617,31 +2668,30 @@ body {
 }
 
 .query-tabs {
-  position: relative;
-  left: auto;
-  top: auto;
+  position: absolute;
+  left: var(--topbar-tabs-x);
+  top: calc(var(--topbar-h) - var(--topbar-tabs-h));
   z-index: 4;
-  align-self: end;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  width: 100%;
+  width: var(--topbar-tabs-w);
   min-width: 0;
   height: var(--topbar-tabs-h);
   padding: 0 var(--topbar-tabs-pad);
-  border-radius: calc(var(--topbar-tabs-h) / 2) calc(var(--topbar-tabs-h) / 2) 0 0;
+  border-radius: calc(var(--topbar-tabs-h) * 0.78) calc(var(--topbar-tabs-h) * 0.78) 0 0;
 }
 
 .query-tabs::before,
 .query-tabs::after {
-  width: clamp(50px, 4.9vw, 94px);
+  width: var(--topbar-tabs-wing);
   height: var(--topbar-tabs-h);
 }
 
 .query-tabs::before {
-  left: calc(clamp(30px, 2.76vw, 53px) * -1);
+  left: calc(var(--topbar-tabs-notch) * -1);
 }
 
 .query-tabs::after {
-  right: calc(clamp(30px, 2.76vw, 53px) * -1);
+  right: calc(var(--topbar-tabs-notch) * -1);
 }
 
 .query-tabs button {
@@ -2654,23 +2704,24 @@ body {
   white-space: nowrap;
 }
 
-.query-tabs button.is-active::after {
+.query-tabs button:hover::after,
+.query-tabs button:focus-visible::after {
   left: clamp(20px, 2.24vw, 43px);
   right: clamp(20px, 2.24vw, 43px);
   height: clamp(3px, 0.26vw, 5px);
 }
 
-.ai-topbar .query-tabs button.is-active::after {
+.ai-topbar .query-tabs button:hover::after,
+.ai-topbar .query-tabs button:focus-visible::after {
   left: clamp(20px, 3.1vw, 60px);
   right: clamp(20px, 3.1vw, 60px);
 }
 
 .query-about {
-  position: relative;
+  position: absolute;
   left: auto;
-  top: auto;
-  align-self: center;
-  justify-self: end;
+  right: var(--topbar-action-right);
+  top: calc((var(--topbar-h) - var(--topbar-action-h)) / 2);
   grid-template-columns: clamp(30px, 2.4vw, 46px) 1fr clamp(18px, 1.25vw, 24px) auto;
   width: var(--topbar-action-w);
   height: var(--topbar-action-h);
@@ -2689,13 +2740,13 @@ body {
 }
 
 .query-about img:nth-of-type(2) {
+  grid-column: 3;
   width: clamp(15px, 0.94vw, 18px);
   height: clamp(18px, 1.15vw, 22px);
 }
 
 .query-about span {
-  border-width: clamp(6px, 0.47vw, 9px);
-  margin-right: clamp(8px, 0.9vw, 17px);
+  display: none;
 }
 
 .query-left,
@@ -2908,7 +2959,8 @@ body {
 
 @media (max-width: 1360px) {
   :root {
-    --topbar-logo-col: clamp(180px, 15vw, 220px);
+    --topbar-tabs-x: clamp(246px, 23.4vw, 318px);
+    --topbar-tabs-w: min(690px, calc(100vw - var(--topbar-tabs-x) - var(--topbar-action-w) - 72px));
     --topbar-action-w: 188px;
     --query-sidebar-w: clamp(286px, 21vw, 318px);
     --ai-sidebar-w: clamp(286px, 21vw, 304px);
@@ -2929,15 +2981,13 @@ body {
 @media (max-width: 1120px) {
   :root {
     --topbar-h: 76px;
-    --topbar-logo-col: 188px;
+    --topbar-tabs-x: 190px;
+    --topbar-tabs-w: calc(100vw - 278px);
+    --topbar-tabs-h: 52px;
     --topbar-action-w: 54px;
+    --topbar-action-right: 12px;
     --query-sidebar-w: 260px;
     --ai-sidebar-w: 260px;
-  }
-
-  .query-topbar {
-    grid-template-columns: var(--topbar-logo-col) minmax(0, 1fr) var(--topbar-action-w);
-    column-gap: 12px;
   }
 
   .query-tabs {
@@ -2988,7 +3038,8 @@ body {
 
 @media (max-width: 900px) {
   :root {
-    --topbar-logo-col: 156px;
+    --topbar-tabs-x: 156px;
+    --topbar-tabs-w: calc(100vw - 238px);
     --query-sidebar-w: 232px;
     --ai-sidebar-w: 232px;
   }
