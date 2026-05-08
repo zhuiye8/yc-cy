@@ -59,7 +59,7 @@
         <span><i class="blueprint-dot" style="color:#fff4c4"></i>脉冲</span>
       </div>
       <div class="blueprint-actions">
-        <span>Esc 重置</span>
+        <span>Esc 重置/返回上一级</span>
         <button type="button" @click="onReset">返回总览</button>
         <button type="button" class="blueprint-back" @click="emit('exit')">← 返回首页</button>
       </div>
@@ -838,9 +838,9 @@ onMounted(() => {
         const labelOffset = radialDir.clone().multiplyScalar(radialPush)
           .add(new THREE.Vector3(0, yLift, 0))
         const node = createNode(data.name, color.clone(), scale, {
-          maxLength: level === 2 ? 8 : 6,
-          fontSize: level === 2 ? 32 : 28,
-          labelScale: level === 2 ? 0.50 : 0.40,
+          maxLength: 8,
+          fontSize: 32,
+          labelScale: 0.50,
           labelOffset,
           levelLabel: `L${level}`
         })
