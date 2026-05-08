@@ -12,18 +12,36 @@
 
     <!-- 左上：产业链快速切换面板 -->
     <nav class="blueprint-sector-menu" aria-label="产业链切换">
-      <div class="blueprint-sector-menu-title">产业切换</div>
-      <button
-        v-for="entry in sectorMenu"
-        :key="entry.dataKey"
-        type="button"
-        :class="['blueprint-sector-menu-item', { 'is-active': activeSectorKey === entry.dataKey }]"
-        :style="{ '--accent': entry.colorHex }"
-        @click="onSectorMenuClick(entry)"
-      >
-        <span class="blueprint-sector-menu-dot"></span>
-        <span class="blueprint-sector-menu-name">{{ entry.name }}</span>
-      </button>
+      <!-- 静态头部：标题 + 快速跳转 chip（不参与下方滚动） -->
+      <div class="blueprint-sector-menu-header">
+        <div class="blueprint-sector-menu-title">产业切换</div>
+        <div class="blueprint-sector-menu-jumps" aria-label="按大类跳转">
+          <button
+            v-for="cat in categoryJumps"
+            :key="cat.key"
+            type="button"
+            class="blueprint-jump-chip"
+            :style="{ '--accent': cat.colorHex }"
+            :title="`${cat.name} · ${cat.count} 条`"
+            @click="onJumpToCategory(cat.key)"
+          >{{ cat.shortName }}</button>
+        </div>
+      </div>
+      <!-- 可滚动的菜单列表 -->
+      <div class="blueprint-sector-menu-list">
+        <button
+          v-for="entry in sectorMenu"
+          :key="entry.dataKey"
+          type="button"
+          :data-group-key="entry.groupKey"
+          :class="['blueprint-sector-menu-item', { 'is-active': activeSectorKey === entry.dataKey }]"
+          :style="{ '--accent': entry.colorHex }"
+          @click="onSectorMenuClick(entry)"
+        >
+          <span class="blueprint-sector-menu-dot"></span>
+          <span class="blueprint-sector-menu-name">{{ entry.name }}</span>
+        </button>
+      </div>
     </nav>
 
     <div class="blueprint-hud">
@@ -87,7 +105,32 @@ const sectorMenu = sectorList.map((s) => ({
   name: s.name,
   dataKey: s.dataKey,
   colorHex: s.colorHex,
+  groupKey: s.groupKey,
 }))
+
+// 顶部快速跳转 chip：按 groupKey 去重，保持原始顺序
+const categoryJumps = (() => {
+  const seen = new Set()
+  const jumps = []
+  for (const s of sectorList) {
+    if (seen.has(s.groupKey)) continue
+    seen.add(s.groupKey)
+    jumps.push({
+      key: s.groupKey,
+      name: s.groupName,
+      shortName: s.groupShort,
+      colorHex: s.colorHex,
+      count: sectorList.filter(x => x.groupKey === s.groupKey).length,
+    })
+  }
+  return jumps
+})()
+
+function onJumpToCategory(groupKey) {
+  const el = document.querySelector(`.blueprint-sector-menu-item[data-group-key="${groupKey}"]`)
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 const activeSectorKey = ref(null)
 let selectSectorByKeyFn = () => {}
 function onSectorMenuClick(entry) {
@@ -1651,8 +1694,8 @@ onBeforeUnmount(() => cleanup())
   top: 20px;
   left: 20px;
   z-index: 6;
-  width: 158px;
-  max-height: calc(100vh - 80px);
+  width: 178px;
+  max-height: calc(50vh - 40px);
   padding: 12px 12px 10px;
   border-radius: 16px;
   border: 1px solid rgba(133, 205, 255, 0.2);
@@ -1661,37 +1704,74 @@ onBeforeUnmount(() => cleanup())
   box-shadow: 0 0 28px rgba(25, 96, 180, 0.16);
   font-family: "Segoe UI", "PingFang SC", sans-serif;
   pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.blueprint-sector-menu-header {
+  flex: 0 0 auto;
+}
+.blueprint-sector-menu-list {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding-right: 2px;
   scrollbar-width: thin;
   scrollbar-color: rgba(133, 205, 255, 0.35) transparent;
 }
-.blueprint-sector-menu::-webkit-scrollbar {
+.blueprint-sector-menu-list::-webkit-scrollbar {
   width: 6px;
 }
-.blueprint-sector-menu::-webkit-scrollbar-track {
+.blueprint-sector-menu-list::-webkit-scrollbar-track {
   background: transparent;
 }
-.blueprint-sector-menu::-webkit-scrollbar-thumb {
+.blueprint-sector-menu-list::-webkit-scrollbar-thumb {
   background: rgba(133, 205, 255, 0.32);
   border-radius: 3px;
 }
-.blueprint-sector-menu::-webkit-scrollbar-thumb:hover {
+.blueprint-sector-menu-list::-webkit-scrollbar-thumb:hover {
   background: rgba(133, 205, 255, 0.55);
 }
 .blueprint-sector-menu-title {
-  position: sticky;
-  top: -12px;
-  margin: -12px -12px 4px;
-  padding: 12px 16px 8px;
-  background: linear-gradient(to bottom, rgba(8, 14, 26, 0.95) 70%, rgba(8, 14, 26, 0.0));
+  margin: 0 0 6px;
+  padding: 0 4px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.22em;
   color: rgba(150, 200, 240, 0.78);
-  z-index: 1;
+}
+.blueprint-sector-menu-jumps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid rgba(133, 205, 255, 0.18);
+}
+.blueprint-jump-chip {
+  min-width: 0;
+  padding: 5px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 16%, rgba(8, 14, 26, 0.6));
+  color: rgba(232, 246, 255, 0.92);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.12s ease;
+}
+.blueprint-jump-chip:hover {
+  background: color-mix(in srgb, var(--accent) 36%, rgba(8, 14, 26, 0.6));
+  transform: translateY(-1px);
+}
+.blueprint-jump-chip:active {
+  transform: translateY(0);
 }
 .blueprint-sector-menu-item {
   width: 100%;

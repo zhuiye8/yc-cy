@@ -20,13 +20,19 @@ const GICS = resolve(ROOT, '../../gics_local_site_v9/gics_local_site_v9')
 const EXT_DIR = resolve(GICS, 'extensions')
 const OUT = resolve(ROOT, 'src/platform/data/industry-chain-graph.js')
 
-// GICS 一级大类（前 2 位） → 颜色
-const GICS_GROUP_COLOR = {
-  '15': '#b8aaff', // 材料
-  '20': '#ffb066', // 资本货物 / 工业
-  '25': '#ff9bd1', // 汽车与零部件
-  '35': '#86e4ff', // 医疗保健 / 制药
-  '45': '#6bffcf', // 技术硬件 / 半导体
+// 主产业分组：返回 { key, name, color }
+// - 资本货物（20xx）按 6 位 GICS 行业代码再拆 3 子类
+// - 其它走前 2 位
+function classifyGicsGroup(gicsCode) {
+  if (gicsCode.startsWith('201010')) return { key: 'aerospace',  name: '航空航天与国防', color: '#ffb066', shortName: '航天' }
+  if (gicsCode.startsWith('201040')) return { key: 'electrical', name: '电气零部件与设备', color: '#ffd980', shortName: '电气' }
+  if (gicsCode.startsWith('201060')) return { key: 'machinery',  name: '机械（工程 + 工业）', color: '#e89060', shortName: '机械' }
+  const p2 = gicsCode.slice(0, 2)
+  if (p2 === '15') return { key: 'materials', name: '材料',           color: '#b8aaff', shortName: '材料' }
+  if (p2 === '25') return { key: 'auto',      name: '汽车与零部件',     color: '#ff9bd1', shortName: '汽车' }
+  if (p2 === '35') return { key: 'health',    name: '医疗与制药',       color: '#86e4ff', shortName: '医药' }
+  if (p2 === '45') return { key: 'tech',      name: '技术硬件 / 半导体', color: '#6bffcf', shortName: '技术' }
+  return { key: 'other', name: '其它', color: '#86e4ff', shortName: '其它' }
 }
 
 // GICS 子行业（8 位） → 中文名（用于 sectorList 元数据，不直接显示）
@@ -120,16 +126,18 @@ for (const gicsCode of gicsDirs) {
     const parsedRoot = parseChainMarkdown(md, idPrefix)
     const displayName = parsedRoot.name || chainName
 
-    const groupCode = gicsCode.slice(0, 2)
-    const colorHex = GICS_GROUP_COLOR[groupCode] || '#86e4ff'
+    const group = classifyGicsGroup(gicsCode)
     const gicsName = GICS_NAMES[gicsCode] || gicsCode
 
     sectorEntries.push({
       dataKey: idPrefix,
+      groupKey: group.key,
+      groupName: group.name,
+      groupShort: group.shortName,
+      colorHex: group.color,
       name: displayName,
       gicsCode,
       gicsName,
-      colorHex,
       tree: parsedRoot,
     })
   })
@@ -180,6 +188,9 @@ const sectorList = sectorEntries.map(s => ({
   name: s.name,
   gicsCode: s.gicsCode,
   gicsName: s.gicsName,
+  groupKey: s.groupKey,
+  groupName: s.groupName,
+  groupShort: s.groupShort,
   colorHex: s.colorHex,
   position: s.position,
 }))
