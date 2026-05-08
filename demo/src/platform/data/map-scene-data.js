@@ -29,7 +29,7 @@ export function getCityGeo(code) {
 // 让小省视觉放大、大省视觉缩小，最终在屏幕上接近一致大小。缩放围绕 bbox centroid 做。
 const provinceFramingMap = (() => {
   const TARGET_SPAN = 6.64   // 湖北 span，作为虚拟参照尺寸
-  const MIN_SCALE = 0.5      // 大省最多缩到 50%（避免内蒙变成小点）
+  const MIN_SCALE = 0.3      // 大省最多缩到 30%（让新疆/内蒙/西藏真正匹配湖北等大）
   const MAX_SCALE = 3        // 小省最多放大 3x（避免几何离球面过远）
   const map = {}
   for (const feature of chinaGeo.features) {
@@ -43,9 +43,17 @@ const provinceFramingMap = (() => {
     const span = Math.max(lonSpan, latSpan)
     const rawScale = span > 0.01 ? TARGET_SPAN / span : MAX_SCALE
     const displayScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, rawScale))
+    // 个别北方大省（新疆 / 西藏 / 内蒙古）单独把相机往后拉一点
+    const FAR_PROVINCES = { '650000': 4.6, '540000': 4.6, '150000': 4.6 }
+    // 优先用 chinaGeo 自带的 properties.centroid（几何重心，对内蒙这种月牙状省更准），
+    // 缺失时回退到主体 polygon 的 bbox 中心
+    const propCentroid = feature.properties?.centroid
+    const centroid = Array.isArray(propCentroid) && propCentroid.length === 2
+      ? [propCentroid[0], propCentroid[1]]
+      : [(bbox[0] + bbox[2]) / 2, midLat]
     map[code] = {
-      centroid: [(bbox[0] + bbox[2]) / 2, midLat],
-      distance: 3.66,
+      centroid,
+      distance: FAR_PROVINCES[code] ?? 3.66,
       displayScale,
       span,
     }
