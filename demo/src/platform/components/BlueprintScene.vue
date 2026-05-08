@@ -135,7 +135,7 @@ onMounted(() => {
     mipmapBlur: true,
     luminanceThreshold: 0.18,
     luminanceSmoothing: 0.24,
-    intensity: 2.4
+    intensity: 1.4
   })
   bloomEffect.ignoreBackground = true
 
