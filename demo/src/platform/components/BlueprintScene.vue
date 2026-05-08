@@ -471,15 +471,25 @@ onMounted(() => {
     return group
   }
 
+  // 3 点用二次 Bezier（端点严格贴节点不过冲），4+ 点用 CatmullRom（多控制点平滑）
+  function makeChainCurve(points) {
+    if (points.length === 3) {
+      return new THREE.QuadraticBezierCurve3(points[0], points[1], points[2])
+    }
+    return new THREE.CatmullRomCurve3(points)
+  }
+
   function buildGrowthLine(points, color, opacity = 0.92, tubeRadius = 0.025) {
-    const curve = new THREE.CatmullRomCurve3(points)
-    const tubularSegments = 120
-    const radialSegments = 6
-    const geometry = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false)
+    const curve = makeChainCurve(points)
+    const tubularSegments = 160
+    const radialSegments = 14
     const indicesPerRing = radialSegments * 6
-    geometry.setDrawRange(0, 0)
+
+    // 内核：现有亮线，进 bloom 选区
+    const coreGeo = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false)
+    coreGeo.setDrawRange(0, 0)
     const tube = new THREE.Mesh(
-      geometry,
+      coreGeo,
       new THREE.MeshBasicMaterial({
         color,
         transparent: true,
@@ -489,18 +499,36 @@ onMounted(() => {
       })
     )
     bloomEffect.selection.add(tube)
+
+    // 外层 halo：同曲线、半径 ×2.5、低透明，不进 bloom（纯软光晕）
+    const haloGeo = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius * 2.5, radialSegments, false)
+    haloGeo.setDrawRange(0, 0)
+    const halo = new THREE.Mesh(
+      haloGeo,
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: opacity * 0.22,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    )
+    chainGroup.add(halo)
+
     const head = new THREE.Mesh(
       new THREE.SphereGeometry(0.12, 16, 16),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })
     )
     chainGroup.add(head)
-    return { curve, line: tube, head, tubularSegments, indicesPerRing }
+    return { curve, line: tube, halo, head, tubularSegments, indicesPerRing }
   }
 
   function updateGrowth(lineObject, progress) {
     const clamped = THREE.MathUtils.clamp(progress, 0, 1)
     const rings = Math.floor(lineObject.tubularSegments * clamped)
-    lineObject.line.geometry.setDrawRange(0, rings * lineObject.indicesPerRing)
+    const drawCount = rings * lineObject.indicesPerRing
+    lineObject.line.geometry.setDrawRange(0, drawCount)
+    if (lineObject.halo?.geometry) lineObject.halo.geometry.setDrawRange(0, drawCount)
     lineObject.head.position.copy(lineObject.curve.getPoint(Math.max(0.001, clamped)))
     lineObject.head.visible = clamped > 0.001 && clamped < 0.995
   }
@@ -654,19 +682,28 @@ onMounted(() => {
   }
 
   // ── 点击 L1 后子树展开（L2 / L3 / L4） ─────────────────────────────────────
-  // 子树连线（与 buildGrowthLine 接口兼容，head 挂在指定 parent）
+  // 子树连线（与 buildGrowthLine 接口兼容，head/halo 挂在指定 parent）
   function buildSubtreeGrowthLine(points, color, parent, tubeRadius = 0.012) {
-    const curve = new THREE.CatmullRomCurve3(points)
-    const tubularSegments = 80
-    const radialSegments = 6
-    const geometry = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false)
+    const curve = makeChainCurve(points)
+    const tubularSegments = 110
+    const radialSegments = 12
     const indicesPerRing = radialSegments * 6
-    geometry.setDrawRange(0, 0)
-    const tube = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+
+    const coreGeo = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false)
+    coreGeo.setDrawRange(0, 0)
+    const tube = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({
       color, transparent: true, opacity: 0.85,
       blending: THREE.AdditiveBlending, depthWrite: false,
     }))
     bloomEffect.selection.add(tube)
+
+    const haloGeo = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius * 2.5, radialSegments, false)
+    haloGeo.setDrawRange(0, 0)
+    const halo = new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.85 * 0.22,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }))
+
     const head = new THREE.Mesh(
       new THREE.SphereGeometry(Math.max(0.05, tubeRadius * 5), 12, 12),
       new THREE.MeshBasicMaterial({
@@ -676,8 +713,9 @@ onMounted(() => {
     )
     head.visible = false
     parent.add(tube)
+    parent.add(halo)
     parent.add(head)
-    return { curve, line: tube, head, tubularSegments, indicesPerRing }
+    return { curve, line: tube, halo, head, tubularSegments, indicesPerRing }
   }
 
   function activateChildNode(node, scaleTarget = 1) {
@@ -779,6 +817,10 @@ onMounted(() => {
         node.userData.nodeData = data
         node.userData.subtreeLevel = level
         node.userData.l1LocalPos = l1Pos.clone()
+        // L3 节点（###）去掉光环，跟 L2 拉开视觉差异 + 减少密集时的视觉噪声
+        if (level === 3 && node.userData.ring) {
+          node.userData.ring.visible = false
+        }
         parent.add(node)
         placedNodes.push(node)
 
@@ -898,10 +940,15 @@ onMounted(() => {
     })
     lines.forEach((lo) => {
       if (lo.line?.geometry?.setDrawRange) lo.line.geometry.setDrawRange(0, 0)
+      if (lo.halo?.geometry?.setDrawRange) lo.halo.geometry.setDrawRange(0, 0)
       if (lo.head) lo.head.visible = false
       if (lo.line?.material) {
         gsap.killTweensOf(lo.line.material)
         lo.line.material.opacity = 0.85
+      }
+      if (lo.halo?.material) {
+        gsap.killTweensOf(lo.halo.material)
+        lo.halo.material.opacity = 0.85 * 0.22
       }
     })
 
@@ -961,9 +1008,14 @@ onMounted(() => {
           opacity: 0, duration: 0.24, ease: 'power2.in',
           onComplete: () => {
             if (lo.line?.geometry?.setDrawRange) lo.line.geometry.setDrawRange(0, 0)
+            if (lo.halo?.geometry?.setDrawRange) lo.halo.geometry.setDrawRange(0, 0)
             if (lo.head) lo.head.visible = false
           }
         })
+      }
+      if (lo.halo?.material) {
+        gsap.killTweensOf(lo.halo.material)
+        gsap.to(lo.halo.material, { opacity: 0, duration: 0.24, ease: 'power2.in' })
       }
     })
   }
@@ -1007,10 +1059,18 @@ onMounted(() => {
       gsap.killTweensOf(activeChain.mainLine.line.material)
       gsap.to(activeChain.mainLine.line.material, { opacity: dim ? 0.18 : 0.85, duration: 0.32 })
     }
+    if (activeChain.mainLine?.halo?.material) {
+      gsap.killTweensOf(activeChain.mainLine.halo.material)
+      gsap.to(activeChain.mainLine.halo.material, { opacity: (dim ? 0.18 : 0.85) * 0.22, duration: 0.32 })
+    }
     activeChain.branchLines.forEach((lo) => {
       if (lo.line?.material) {
         gsap.killTweensOf(lo.line.material)
         gsap.to(lo.line.material, { opacity: dim ? 0.14 : 0.62, duration: 0.32 })
+      }
+      if (lo.halo?.material) {
+        gsap.killTweensOf(lo.halo.material)
+        gsap.to(lo.halo.material, { opacity: (dim ? 0.14 : 0.62) * 0.22, duration: 0.32 })
       }
     })
   }
@@ -1064,7 +1124,7 @@ onMounted(() => {
         if (lvl === 2) dimmed = (node !== focusedL2Node)
         else dimmed = (node.parent !== focusedL2Node)
       }
-      setSubtreeNodeOpacity(node, dimmed ? 0.16 : 0.92)
+      setSubtreeNodeOpacity(node, dimmed ? 0.02 : 0.92)
     }
   }
 
