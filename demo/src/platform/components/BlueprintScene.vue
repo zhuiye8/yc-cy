@@ -8,6 +8,7 @@
     >
       <span>{{ labelTooltip.level }}</span>
       <strong>{{ labelTooltip.title }}</strong>
+      <em v-if="labelTooltip.meta">{{ labelTooltip.meta }}</em>
     </div>
 
     <!-- 左上：产业链快速切换面板 -->
@@ -94,6 +95,7 @@ const labelTooltip = reactive({
   y: 0,
   title: '',
   level: '',
+  meta: '',
   accent: '#86e4ff'
 })
 
@@ -1403,6 +1405,38 @@ onMounted(() => {
     return '节点'
   }
 
+  // 鼠标悬浮时附加的信息：GICS 编号 / 段数 / 子项数，让用户对深度有预期
+  function getOwnerMeta(owner) {
+    if (!owner) return ''
+    const ud = owner.userData
+
+    // 主产业球（sector）：从 sectorList + industryChainGraphData 取 GICS 码 + 总段/子项
+    if (ud?.data?.dataKey) {
+      const sec = sectorList.find((s) => s.dataKey === ud.data.dataKey)
+      if (!sec) return ''
+      const graph = industryChainGraphData[sec.dataKey] || {}
+      let segCount = 0
+      let subCount = 0
+      for (const ax of ['upstream', 'midstream', 'downstream']) {
+        const children = graph[ax]?.root?.children || []
+        segCount += children.length
+        for (const ch of children) subCount += (ch.children?.length || 0)
+      }
+      return `GICS ${sec.gicsCode} · ${segCount} 段 · ${subCount} 项`
+    }
+
+    // L1 分支 / L2 / L3 ：用 nodeData 计 immediate + 子代数
+    if (ud?.nodeData) {
+      const children = ud.nodeData.children || []
+      if (!children.length) return ''
+      let leaf = 0
+      for (const ch of children) leaf += (ch.children?.length || 0)
+      return leaf > 0 ? `${children.length} 段 · ${leaf} 子项` : `${children.length} 项`
+    }
+
+    return ''
+  }
+
   function showLabelTooltip(owner, event) {
     const title = getOwnerTitle(owner)
     if (!title) {
@@ -1416,6 +1450,7 @@ onMounted(() => {
     labelTooltip.y = Math.min(Math.max(event.clientY - rect.top + 18, 18), Math.max(18, rect.height - 112))
     labelTooltip.title = title
     labelTooltip.level = getOwnerLevel(owner)
+    labelTooltip.meta = getOwnerMeta(owner)
     labelTooltip.accent = color?.isColor ? colorToCss(color, 1) : '#86e4ff'
   }
 
@@ -1678,6 +1713,17 @@ onBeforeUnmount(() => cleanup())
   font-weight: 700;
   overflow-wrap: anywhere;
   text-shadow: 0 0 12px rgba(134, 228, 255, 0.26);
+}
+
+.blueprint-node-tooltip em {
+  display: block;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(134, 228, 255, 0.16);
+  font-size: 11px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  color: rgba(170, 220, 250, 0.78);
 }
 
 .blueprint-hud {
