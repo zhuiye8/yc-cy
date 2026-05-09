@@ -46,6 +46,16 @@
     </nav>
 
     <div class="blueprint-hud">
+      <button
+        v-if="activeSectorKey"
+        type="button"
+        class="blueprint-back-btn"
+        title="返回上一级（Esc）"
+        @click="onGoBack"
+      >
+        <span class="blueprint-back-arrow">‹</span>
+        <span>返回上一级</span>
+      </button>
       <div class="blueprint-status">
         <div class="blueprint-status-kicker">场景状态</div>
         <div class="blueprint-status-title">{{ statusTitle }}</div>
@@ -101,6 +111,8 @@ const labelTooltip = reactive({
 
 let resetSceneFn = () => {}
 const onReset = () => resetSceneFn()
+let goBackFn = () => {}
+const onGoBack = () => goBackFn()
 
 // 主产业菜单：50 条产业链各一项，顺序按 GICS 大类聚合（dataKey/colorHex/position 全部由 build 脚本生成）
 const sectorMenu = sectorList.map((s) => ({
@@ -1253,6 +1265,7 @@ onMounted(() => {
       const base = item.userData.basePosition.clone()
       const state = item.userData.state
       if (item === sector) {
+        item.visible = true   // 切换聚焦目标时，新聚焦的球可能上一轮被 visible=false，先打开
         currentTimeline.to(item.position, { x: -4.1, y: 0.18, z: 1.2, duration: 1.15 }, 0)
         currentTimeline.to(item.scale, { x: 0.94, y: 0.94, z: 0.94, duration: 1.15 }, 0)
         currentTimeline.to(state, { opacity: 0.94, glow: 1.19, duration: 1.15, onUpdate: () => {
@@ -1261,6 +1274,8 @@ onMounted(() => {
           item.userData.label.material.opacity = 0.9
         }}, 0)
       } else {
+        // 聚焦时其它产业球完全隐藏：fade 到 alpha 0，动画结束后整组设 visible=false，
+        // 既不占 z 缓冲（不会挡住选中产业链），也不会被 hover/click 命中
         const push = base.clone().normalize().multiplyScalar(3.5)
         currentTimeline.to(item.position, {
           x: base.x + push.x,
@@ -1269,12 +1284,16 @@ onMounted(() => {
           duration: 1.05
         }, 0)
         currentTimeline.to(item.scale, { x: 0.72, y: 0.72, z: 0.72, duration: 1.05 }, 0)
-        currentTimeline.to(item.userData.state, { opacity: 0.08, glow: 0.06, duration: 1.05, onUpdate: () => {
-          const s = item.userData.state
-          item.userData.shell.material.opacity = s.opacity
-          item.userData.shell.material.emissiveIntensity = s.glow
-          item.userData.label.material.opacity = Math.min(0.16, s.opacity)
-        }}, 0)
+        currentTimeline.to(item.userData.state, {
+          opacity: 0, glow: 0, duration: 1.05,
+          onUpdate: () => {
+            const s = item.userData.state
+            item.userData.shell.material.opacity = s.opacity
+            item.userData.shell.material.emissiveIntensity = s.glow
+            item.userData.label.material.opacity = s.opacity
+          },
+          onComplete: () => { item.visible = false },
+        }, 0)
       }
     })
 
@@ -1341,6 +1360,7 @@ onMounted(() => {
     gsap.to(lookTarget, { x: overviewLookBase.x, y: overviewLookBase.y, z: overviewLookBase.z, duration: 1.15, ease: 'power3.out' })
 
     sectors.forEach((sector) => {
+      sector.visible = true   // 之前可能因聚焦被 visible=false 隐藏，回到总览先打开
       const base = sector.userData.basePosition
       const state = sector.userData.state
       gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: 1.05, ease: 'power3.out' })
@@ -1354,6 +1374,11 @@ onMounted(() => {
   }
 
   resetSceneFn = resetScene
+  // "返回上一级"：聚焦了 L1 → 退回到产业链总览；只聚焦产业 → 退回 50 球总览
+  goBackFn = () => {
+    if (focusedBranchNode) closeBranchDetail()
+    else if (sceneState.focusedSector) resetScene()
+  }
 
   // 产业切换菜单点击：自动处理"已聚焦其他产业 / 动画进行中"等情况
   selectSectorByKeyFn = (key) => {
@@ -1380,7 +1405,12 @@ onMounted(() => {
   }
 
   function getLabelHitAreas() {
-    const areas = [...sectorHitAreas, ...branchHitAreas]
+    // 已聚焦时，只把当前聚焦的产业球加进 hover 命中区——其它球已 visible=false，
+    // 但 raycaster 不看 visible，必须显式过滤掉，否则鼠标扫过隐形位置还会冒 tooltip
+    const visibleSectorHits = sceneState.focusedSector
+      ? sectorHitAreas.filter(h => h.userData?.owner === sceneState.focusedSector)
+      : sectorHitAreas
+    const areas = [...visibleSectorHits, ...branchHitAreas]
     if (!activeChain) return areas
     activeChain.nodes?.forEach((node) => {
       if (node.userData?.core) areas.push(node.userData.core)
@@ -1732,6 +1762,42 @@ onBeforeUnmount(() => cleanup())
   right: 20px;
   z-index: 5;
   pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.blueprint-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 12px 0 8px;
+  margin-top: 6px;
+  border: 1px solid rgba(133, 205, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(8, 14, 26, 0.72);
+  color: rgba(220, 240, 255, 0.92);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+}
+.blueprint-back-btn:hover {
+  background: rgba(20, 38, 70, 0.85);
+  border-color: rgba(133, 205, 255, 0.6);
+  color: #ffffff;
+}
+.blueprint-back-btn:active {
+  transform: translateY(1px);
+}
+.blueprint-back-arrow {
+  font-size: 18px;
+  line-height: 1;
+  transform: translateY(-1px);
 }
 
 /* 左上角产业切换面板 */
