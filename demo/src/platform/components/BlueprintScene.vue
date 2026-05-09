@@ -1178,6 +1178,31 @@ onMounted(() => {
       }
       setSubtreeNodeOpacity(node, dimmed ? 0.02 : 0.92)
     }
+    // 聚焦了 L2 时，主链 backbone 和分支线非常透明（保留淡淡的轮廓感，不完全消失）；
+    // 解除 L2 聚焦时恢复到 L1 详情态的常规透明度（mainLine 0.18、branchLines 0.14）
+    const mainOpa = focusedL2Node ? 0.06 : 0.18
+    const branchOpa = focusedL2Node ? 0.04 : 0.14
+    if (activeChain?.mainLine) {
+      const ml = activeChain.mainLine
+      if (ml.line?.material) {
+        gsap.killTweensOf(ml.line.material)
+        gsap.to(ml.line.material, { opacity: mainOpa, duration: 0.28 })
+      }
+      if (ml.halo?.material) {
+        gsap.killTweensOf(ml.halo.material)
+        gsap.to(ml.halo.material, { opacity: mainOpa * 0.22, duration: 0.28 })
+      }
+    }
+    activeChain?.branchLines?.forEach((lo) => {
+      if (lo.line?.material) {
+        gsap.killTweensOf(lo.line.material)
+        gsap.to(lo.line.material, { opacity: branchOpa, duration: 0.28 })
+      }
+      if (lo.halo?.material) {
+        gsap.killTweensOf(lo.halo.material)
+        gsap.to(lo.halo.material, { opacity: branchOpa * 0.22, duration: 0.28 })
+      }
+    })
   }
 
   function openL2Detail(l2Node) {
