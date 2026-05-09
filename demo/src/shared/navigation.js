@@ -29,23 +29,28 @@ export function createNavigationController({
   function navigateToView(viewId, options = {}) {
     if (!isKnownViewId(viewId)) return false
 
-    activate(viewId)
+    const route = options.route || viewIdToRoute(viewId)
+    activate(viewId, { ...options, route })
 
     const shouldSyncHash = options.syncHash ?? syncHashOnNavigate
     if (shouldSyncHash) {
-      writeHashRoute(viewIdToRoute(viewId), options.replace ? 'replace' : 'push')
+      writeHashRoute(route, options.replace ? 'replace' : 'push')
     }
 
     return true
   }
 
   function navigateToRoute(route, options = {}) {
-    return navigateToView(routeToViewId(route), options)
+    const normalizedRoute = normalizeRoute(route)
+    return navigateToView(routeToViewId(normalizedRoute), {
+      ...options,
+      route: normalizedRoute,
+    })
   }
 
   function syncFromLocation(options = {}) {
     if (!window.location.hash) return false
-    return navigateToRoute(readHashRoute(), { replace: true, ...options })
+    return navigateToRoute(readHashRoute(), { replace: true, syncHash: false, ...options })
   }
 
   function getCurrentRoute() {

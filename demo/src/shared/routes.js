@@ -28,8 +28,14 @@ export function normalizeRoute(route) {
   return withoutHash.startsWith('/') ? withoutHash : `/${withoutHash}`
 }
 
+export function routePath(route) {
+  return normalizeRoute(route).split('?')[0]
+}
+
 export function routeToViewId(route) {
-  return ROUTE_TO_VIEW[normalizeRoute(route)] || VIEW_IDS.home
+  const path = routePath(route)
+  if (path.startsWith('/query/')) return VIEW_IDS.query
+  return ROUTE_TO_VIEW[path] || VIEW_IDS.home
 }
 
 export function viewIdToRoute(viewId) {

@@ -25,6 +25,8 @@ const HOME_SNAP_POINTS = [
   { name: "partners", y: 2070 },
 ];
 
+let activeQueryPanel = document.querySelector(".query-side-item.is-active")?.dataset.queryType || "org";
+
 function isHomeActive() {
   return document.getElementById("homeView")?.classList.contains("is-active");
 }
@@ -171,7 +173,34 @@ function showQueryDetailPanel(queryType) {
   return true;
 }
 
-function activate(targetId) {
+function getQueryTypeFromRoute(route) {
+  const value = String(route || window.location.hash || "").trim();
+  const withoutHash = value.startsWith("#") ? value.slice(1) : value;
+  const normalized = withoutHash.startsWith("/") ? withoutHash : `/${withoutHash}`;
+  const path = normalized.split("?")[0];
+  const match = path.match(/^\/query\/([^/]+)$/);
+  return match?.[1] || null;
+}
+
+function setActiveQueryType(queryType) {
+  if (!queryType) return;
+  activeQueryPanel = queryType;
+  document.querySelectorAll(".query-side-item").forEach((item) => {
+    item.classList.toggle("is-active", item.dataset.queryType === queryType);
+  });
+}
+
+function showQueryRoute(route) {
+  const queryType = getQueryTypeFromRoute(route);
+  if (queryType) {
+    setActiveQueryType(queryType);
+    if (showQueryDetailPanel(queryType)) return;
+  }
+
+  showQuerySearchMode();
+}
+
+function activate(targetId, options = {}) {
   views.forEach((view) => {
     view.classList.toggle("is-active", view.id === targetId);
   });
@@ -192,7 +221,7 @@ function activate(targetId) {
   }, 120);
 
   if (targetId === "queryView") {
-    showQuerySearchMode();
+    showQueryRoute(options.route);
   }
 }
 
@@ -212,7 +241,7 @@ function showToast(message) {
 const navigation = createNavigationController({
   activate,
   getActiveViewId,
-  syncHashOnNavigate: false,
+  syncHashOnNavigate: true,
 });
 
 installNavigationGlobals(navigation);
@@ -236,8 +265,6 @@ window.addEventListener("resize", () => {
   syncQueryDetailHeight();
 });
 updateHomeFeatureLayout();
-
-let activeQueryPanel = document.querySelector(".query-side-item.is-active")?.dataset.queryType || "org";
 
 document.querySelectorAll(".query-side-item-legacy-disabled").forEach((button) => {
   button.addEventListener("click", () => {
@@ -272,13 +299,9 @@ document.querySelectorAll(".query-side-item").forEach((button) => {
       event.stopImmediatePropagation();
 
       const queryType = button.dataset.queryType;
-      document.querySelectorAll(".query-side-item").forEach((item) => {
-        item.classList.toggle("is-active", item === button);
-      });
-
-      activeQueryPanel = queryType || activeQueryPanel;
+      setActiveQueryType(queryType || activeQueryPanel);
       window.scrollTo({ top: 0, left: 0, behavior: "instant" });
-      showQuerySearchMode();
+      navigation.navigateToRoute("/query", { replace: true });
     },
     true,
   );
@@ -291,7 +314,9 @@ querySearchButton?.addEventListener("click", () => {
   const queryType = document.querySelector(".query-side-item.is-active")?.dataset.queryType || activeQueryPanel;
   activeQueryPanel = queryType;
 
-  if (!showQueryDetailPanel(queryType)) {
+  if (document.querySelector(`.query-detail-page[data-query-panel="${queryType}"]`)) {
+    navigation.navigateToRoute(`/query/${queryType}`);
+  } else {
     showQuerySearchMode();
     showToast("期刊详情页暂未接入");
   }
