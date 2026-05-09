@@ -16,7 +16,7 @@
           <span>实时演算</span>
         </div>
         <div class="title-metric-strip">
-          <div v-for="item in headlineMetrics" :key="item.key" class="title-metric">
+          <div v-for="item in apiHeadlineMetrics" :key="item.key" class="title-metric">
             <span>{{ item.label }}</span>
             <strong>{{ item.display }}</strong>
           </div>
@@ -55,14 +55,14 @@
     </section>
 
     <!-- City quick-entry panel -->
-    <section v-if="selectedCity && cityQuickEntries.length" class="hud city-quick-panel glass-card">
+    <section v-if="selectedCity && spaceTrendCityQuickEntries.length" class="hud city-quick-panel glass-card">
       <div class="section-head compact">
         <span>{{ CATEGORY_STYLES[activeCategory].label }}快捷入口</span>
         <strong>{{ selectedCity.name }}</strong>
       </div>
       <div class="city-quick-grid">
         <button
-          v-for="item in cityQuickEntries" :key="item.id"
+          v-for="item in spaceTrendCityQuickEntries" :key="item.id"
           class="city-quick-card"
           :style="{ '--quick-color': CHART_CAT_COLORS[activeCategory] }"
           @click="onOpenQuickEntry(item)"
@@ -161,6 +161,7 @@ import { buildWuhanActivityDetail } from '../data/activity-details.js'
 // ── Composables ───────────────────────────────────────────────────────────────
 import { useGlobeScene } from '../composables/useGlobeScene.js'
 import { useIntelData, CHART_CAT_COLORS, kpiColors } from '../composables/useIntelData.js'
+import { useSpaceTrendData } from '../composables/useSpaceTrendData.js'
 import { colorToCss } from '../utils/geoMath.js'
 import {
   ctx, FOCUS_PROVINCE_GEOS, FOCUS_CITY_DISTRICT_GEOS,
@@ -223,6 +224,12 @@ const {
   categoryColorCss, talentGraph, enterpriseGraph, patentGraph, paperGraph,
   kpiCountedValues, kpiWidth, loadSectorData, resetIntelData,
 } = useIntelData(selectedParticleData)
+const {
+  summary: spaceTrendSummary,
+  getCategoryItems: getSpaceTrendCategoryItems,
+  loadRegionOverview: loadSpaceTrendRegionOverview,
+  loadRegionIntel: loadSpaceTrendRegionIntel,
+} = useSpaceTrendData()
 
 // ── Timers & stable handler refs ─────────────────────────────────────────────
 let particleDetailTimer = null
@@ -250,6 +257,13 @@ const headlineMetrics = computed(() => ([
   { key: 'pulses',    label: '脉冲省数', display: formatMetric(headlineMetricValues.pulses) },
 ]))
 
+const apiHeadlineMetrics = computed(() => ([
+  { key: 'talent', label: '人才', display: formatMetric(spaceTrendSummary.value.talentTotal) },
+  { key: 'enterprise', label: '企业', display: formatMetric(spaceTrendSummary.value.enterpriseTotal) },
+  { key: 'paper', label: '论文', display: formatMetric(spaceTrendSummary.value.paperTotal) },
+  { key: 'patent', label: '专利', display: formatMetric(spaceTrendSummary.value.patentTotal) },
+]))
+
 watch([particleCount, selectedCity, selectedProvince], () => {
   if (!introInteractive.value) return
   animateHeadlineMetrics(0.45)
@@ -259,6 +273,15 @@ watch([particleCount, selectedCity, selectedProvince], () => {
 const drillLabel = computed(() => getDrillLabel(selectedProvince.value, selectedCity.value))
 const heroTitle  = computed(() => getHeroTitle(selectedProvince.value, selectedCity.value))
 const heroSubtitle = computed(() => getHeroSubtitle(selectedProvince.value, selectedCity.value))
+const currentSpaceTrendRegion = computed(() => {
+  if (selectedCity.value) {
+    return { level: 'CITY', regionName: selectedCity.value.name, code: selectedCity.value.code }
+  }
+  if (selectedProvince.value) {
+    return { level: 'PROVINCE', regionName: selectedProvince.value.name, code: selectedProvince.value.code }
+  }
+  return { level: 'COUNTRY', regionName: '', code: '' }
+})
 
 const heroStats = computed(() => {
   if (selectedCity.value) {
@@ -283,6 +306,19 @@ const provinceMenuItems = computed(() =>
 const cityQuickEntries = computed(() =>
   selectedCity.value ? getDetailItems(selectedCity.value.code, activeCategory.value) : [],
 )
+const spaceTrendCityQuickEntries = computed(() => {
+  if (!selectedCity.value) return []
+  const apiItems = getSpaceTrendCategoryItems(activeCategory.value)
+  return apiItems.length ? apiItems : cityQuickEntries.value
+})
+
+watch(currentSpaceTrendRegion, (region) => {
+  loadSpaceTrendRegionOverview(region, activeCategory.value)
+}, { immediate: true })
+
+watch(activeCategory, (category) => {
+  loadSpaceTrendRegionIntel(currentSpaceTrendRegion.value, category)
+})
 
 // ── Activity detail ───────────────────────────────────────────────────────────
 function isWuhanContext() { return String(selectedCity.value?.code || '') === '420100' }

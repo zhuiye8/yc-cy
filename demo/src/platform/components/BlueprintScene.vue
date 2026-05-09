@@ -1,5 +1,5 @@
 <template>
-  <div class="blueprint-root">
+  <div :class="['blueprint-root', { 'is-org-drawer-open': orgDrawer.visible }]">
     <div ref="stageRef" class="blueprint-stage"></div>
     <div
       v-if="labelTooltip.visible"
@@ -63,6 +63,50 @@
       </div>
     </div>
 
+    <aside v-if="orgDrawer.visible" class="blueprint-org-drawer">
+      <div class="blueprint-org-drawer-head">
+        <div>
+          <span>{{ orgDrawer.level || '产业链节点' }}</span>
+          <strong>{{ orgDrawer.chain }}</strong>
+          <em>{{ orgDrawer.loading ? '查询中...' : `共 ${orgDrawer.total} 家相关企业` }}</em>
+        </div>
+        <button type="button" @click="closeOrgDrawer" aria-label="关闭">×</button>
+      </div>
+      <div class="blueprint-org-search-line">
+        <span>企业列表</span>
+        <small>点击球体或标签切换节点</small>
+      </div>
+      <div v-if="orgDrawer.error" class="blueprint-org-empty">{{ orgDrawer.error }}</div>
+      <div v-else-if="orgDrawer.loading" class="blueprint-org-empty">正在获取企业数据...</div>
+      <div v-else-if="!orgDrawer.items.length" class="blueprint-org-empty">暂无相关企业</div>
+      <div v-else class="blueprint-org-list">
+        <article v-for="item in orgDrawer.items" :key="item.id || item.name" class="blueprint-org-card">
+          <div class="blueprint-org-icon">企</div>
+          <div class="blueprint-org-main">
+            <div class="blueprint-org-title">
+              <strong>{{ item.name }}</strong>
+              <span v-if="item.status">{{ item.status }}</span>
+            </div>
+            <p>{{ [item.province, item.city, item.district].filter(Boolean).join(' / ') || item.address || '区域未披露' }}</p>
+            <div class="blueprint-org-tags">
+              <span v-for="tag in item.tags.slice(0, 3)" :key="tag">{{ tag }}</span>
+              <span v-for="keyword in item.keywords.slice(0, Math.max(0, 3 - item.tags.length))" :key="keyword">{{ keyword }}</span>
+            </div>
+            <div class="blueprint-org-meta">
+              <span>专利 {{ item.patentCount }}</span>
+              <span>论文 {{ item.paperCount }}</span>
+              <span>成果 {{ item.achievementCount }}</span>
+            </div>
+          </div>
+        </article>
+      </div>
+      <div class="blueprint-org-pager">
+        <button type="button" :disabled="orgDrawer.loading || orgDrawer.page <= 1" @click="loadOrgDrawer(orgDrawer.chain, orgDrawer.level, orgDrawer.page - 1)">上一页</button>
+        <span>{{ orgDrawer.page }} / {{ Math.max(1, Math.ceil(orgDrawer.total / orgDrawer.pageSize)) }}</span>
+        <button type="button" :disabled="orgDrawer.loading || orgDrawer.page >= Math.ceil(orgDrawer.total / orgDrawer.pageSize)" @click="loadOrgDrawer(orgDrawer.chain, orgDrawer.level, orgDrawer.page + 1)">下一页</button>
+      </div>
+    </aside>
+
     <div class="blueprint-footer">
       <div class="blueprint-legend">
         <span><i class="blueprint-dot" style="color:#86e4ff"></i>主链</span>
@@ -81,6 +125,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import * as THREE from 'three'
+import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import gsap from 'gsap'
 import {
   BlendFunction,
@@ -92,6 +137,7 @@ import {
   ShockWaveEffect
 } from 'postprocessing'
 import { industryChainGraphData, sectorList } from '../data/industry-chain-graph.js'
+import { searchChainOrgs } from '../../api/chainOrg.js'
 
 const emit = defineEmits(['exit'])
 
@@ -109,6 +155,55 @@ const labelTooltip = reactive({
   accent: '#86e4ff'
 })
 
+const orgDrawer = reactive({
+  visible: false,
+  loading: false,
+  error: '',
+  chain: '',
+  level: '',
+  total: 0,
+  page: 1,
+  pageSize: 8,
+  items: [],
+  requestId: 0,
+})
+
+function closeOrgDrawer() {
+  orgDrawer.visible = false
+  orgDrawer.error = ''
+}
+
+async function loadOrgDrawer(chain, level = '', page = 1) {
+  const keyword = String(chain || '').trim()
+  if (!keyword) return
+
+  const requestId = orgDrawer.requestId + 1
+  orgDrawer.requestId = requestId
+  orgDrawer.visible = true
+  orgDrawer.loading = true
+  orgDrawer.error = ''
+  orgDrawer.chain = keyword
+  orgDrawer.level = level
+  orgDrawer.page = page
+
+  try {
+    const data = await searchChainOrgs({ chain: keyword, page, pageSize: orgDrawer.pageSize })
+    if (requestId !== orgDrawer.requestId) return
+    orgDrawer.total = data.total
+    orgDrawer.page = data.page
+    orgDrawer.pageSize = data.pageSize || orgDrawer.pageSize
+    orgDrawer.items = data.items
+  } catch (error) {
+    if (requestId !== orgDrawer.requestId) return
+    orgDrawer.total = 0
+    orgDrawer.items = []
+    orgDrawer.error = '企业数据暂时不可用'
+    console.warn('[chain-orgs] search failed', error)
+  } finally {
+    if (requestId === orgDrawer.requestId) orgDrawer.loading = false
+  }
+}
+
 let resetSceneFn = () => {}
 const onReset = () => resetSceneFn()
 let goBackFn = () => {}
@@ -121,6 +216,30 @@ const sectorMenu = sectorList.map((s) => ({
   colorHex: s.colorHex,
   groupKey: s.groupKey,
 }))
+
+function isStructureChainName(name) {
+  const value = String(name || '').trim()
+  return !value || value === '上游' || value === '中游' || value === '下游' || value.includes('附录')
+}
+
+function collectGraphNodeNames(node, names) {
+  if (!node) return
+  const name = String(node.name || '').trim()
+  if (!isStructureChainName(name)) names.add(name)
+  ;(node.children || []).forEach((child) => collectGraphNodeNames(child, names))
+}
+
+function buildQueryableChainNames() {
+  const names = new Set(sectorList.map((s) => String(s.name || '').trim()).filter(Boolean))
+  Object.values(industryChainGraphData).forEach((graph) => {
+    ;['upstream', 'midstream', 'downstream'].forEach((key) => {
+      collectGraphNodeNames(graph?.[key]?.root, names)
+    })
+  })
+  return names
+}
+
+const queryableChainNames = buildQueryableChainNames()
 
 // 顶部快速跳转 chip：按 groupKey 去重，保持原始顺序
 const categoryJumps = (() => {
@@ -149,7 +268,11 @@ const activeSectorKey = ref(null)
 let selectSectorByKeyFn = () => {}
 function onSectorMenuClick(entry) {
   if (activeSectorKey.value === entry.dataKey) {
-    resetSceneFn()
+    if (orgDrawer.visible && orgDrawer.chain !== entry.name) {
+      loadOrgDrawer(entry.name, '产业', 1)
+    } else {
+      resetSceneFn()
+    }
   } else {
     selectSectorByKeyFn(entry.dataKey)
   }
@@ -167,12 +290,20 @@ onMounted(() => {
     return { width: w, height: h }
   }
 
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5))
   const initialSize = getStageSize()
   renderer.setSize(initialSize.width, initialSize.height)
   renderer.outputColorSpace = THREE.SRGBColorSpace
   stage.appendChild(renderer.domElement)
+
+  const labelRenderer = new CSS2DRenderer()
+  labelRenderer.setSize(initialSize.width, initialSize.height)
+  labelRenderer.domElement.className = 'blueprint-label-layer'
+  labelRenderer.domElement.style.position = 'absolute'
+  labelRenderer.domElement.style.inset = '0'
+  labelRenderer.domElement.style.pointerEvents = 'none'
+  stage.appendChild(labelRenderer.domElement)
 
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(0x030712)
@@ -192,13 +323,13 @@ onMounted(() => {
     mipmapBlur: true,
     luminanceThreshold: 0.18,
     luminanceSmoothing: 0.24,
-    intensity: 1.4
+    intensity: 0.95
   })
   bloomEffect.ignoreBackground = true
 
   const outlineEffect = new OutlineEffect(scene, camera, {
     blendFunction: BlendFunction.SCREEN,
-    edgeStrength: 3.1,
+    edgeStrength: 2.35,
     pulseSpeed: 0,
     visibleEdgeColor: 0xb8ecff,
     hiddenEdgeColor: 0x08131f,
@@ -254,12 +385,21 @@ onMounted(() => {
     pulse: 0
   }
 
+  const navState = {
+    dragging: false,
+    pointerId: null,
+    lastX: 0,
+    lastY: 0,
+    moved: false
+  }
+
   let currentTimeline = null
   let activeChain = null
   let rafId = null
 
   function shortenLabel(text, maxLength = 12) {
     const chars = Array.from(String(text || '').trim())
+    if (!Number.isFinite(maxLength) || maxLength <= 0) return chars.join('')
     if (chars.length <= maxLength) return chars.join('')
     return `${chars.slice(0, Math.max(2, maxLength - 3)).join('')}...`
   }
@@ -283,42 +423,57 @@ onMounted(() => {
     ctx.closePath()
   }
 
+  function setLabelOpacity(label, opacity) {
+    if (!label) return
+    const visible = opacity > 0.001
+    label.visible = visible
+    if (label.element) {
+      label.element.style.display = visible ? '' : 'none'
+      label.element.style.opacity = String(THREE.MathUtils.clamp(opacity, 0, 1))
+      return
+    }
+    if (label.material) label.material.opacity = opacity
+  }
+
+  function detachLabel(label) {
+    if (!label) return
+    setLabelOpacity(label, 0)
+    if (label.element?.parentNode) {
+      label.element.parentNode.removeChild(label.element)
+    }
+  }
+
   function makeLabelSprite(text, color, scale = 1, options = {}) {
-    const shortText = shortenLabel(text, options.maxLength ?? 12)
-    const canvas = document.createElement('canvas')
+    const shortText = shortenLabel(text, options.maxLength ?? 0)
     const fontSize = options.fontSize ?? 42
-    const font = `700 ${fontSize}px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif`
-    const measure = document.createElement('canvas').getContext('2d')
-    measure.font = font
-    const textWidth = Math.ceil(measure.measureText(shortText).width)
-    canvas.width = Math.max(260, Math.min(720, textWidth + 92))
-    canvas.height = 132
-    const ctx = canvas.getContext('2d')
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    drawRoundRect(ctx, 16, 31, canvas.width - 32, 70, 22)
-    ctx.fillStyle = 'rgba(9, 19, 36, 0.52)'
-    ctx.fill()
-    ctx.lineWidth = 2
-    ctx.strokeStyle = colorToCss(color, 0.34)
-    ctx.stroke()
-    ctx.shadowBlur = 24
-    ctx.shadowColor = colorToCss(color, 0.42)
-    ctx.lineWidth = 8
-    ctx.strokeStyle = 'rgba(10, 22, 38, 0.45)'
-    ctx.fillStyle = 'rgba(236, 246, 255, 0.98)'
-    ctx.font = font
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.strokeText(shortText, canvas.width / 2, canvas.height / 2 + 2)
-    ctx.fillText(shortText, canvas.width / 2, canvas.height / 2 + 2)
-    const texture = new THREE.CanvasTexture(canvas)
-    texture.colorSpace = THREE.SRGBColorSpace
-    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, opacity: 0 })
-    const sprite = new THREE.Sprite(material)
-    sprite.scale.set((canvas.width / 120) * scale, 0.82 * scale, 1)
-    sprite.userData.fullLabel = String(text || '')
-    sprite.userData.shortLabel = shortText
-    return sprite
+    const element = document.createElement('div')
+    element.className = 'blueprint-label'
+    element.textContent = shortText
+    element.title = String(text || '')
+    element.style.setProperty('--accent', colorToCss(color, 0.9))
+    element.style.setProperty('--accent-soft', colorToCss(color, 0.22))
+    element.style.fontSize = `${options.cssFontSize ?? Math.max(12, Math.round(fontSize * 0.36 * scale + 6))}px`
+    element.style.opacity = '0'
+    const label = new CSS2DObject(element)
+    label.userData.fullLabel = String(text || '')
+    label.userData.shortLabel = shortText
+    return label
+  }
+
+  function bindLabelClick(label, owner) {
+    if (!label?.element) return
+    if (!getQueryableChainName(owner)) return
+    label.element.style.pointerEvents = 'auto'
+    label.element.style.cursor = 'pointer'
+    label.element.addEventListener('pointerdown', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+    })
+    label.element.addEventListener('pointerup', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      openOrgDrawerForOwner(owner)
+    })
   }
 
   function createStarField() {
@@ -411,11 +566,11 @@ onMounted(() => {
       new THREE.MeshStandardMaterial({
         color: data.color,
         emissive: data.color,
-        emissiveIntensity: 0.81,
+        emissiveIntensity: 0.38,
         metalness: 0.18,
-        roughness: 0.22,
+        roughness: 0.34,
         transparent: true,
-        opacity: 1
+        opacity: 0.82
       })
     )
 
@@ -426,15 +581,15 @@ onMounted(() => {
     hit.userData.owner = group
     hit.userData.labelOwner = group
 
-    const label = makeLabelSprite(data.name, data.color, 0.6, { maxLength: 10 })
+    const label = makeLabelSprite(data.name, data.color, 0.5, { maxLength: 0, fontSize: 40 })
     label.position.set(0, 1.32, 0)
 
     group.add(shell, hit, label)
     group.userData.shell = shell
     group.userData.label = label
     group.userData.hit = hit
+    bindLabelClick(label, group)
 
-    bloomEffect.selection.add(shell)
     sectorHitAreas.push(hit)
     driftGroup.add(group)
     sectors.push(group)
@@ -480,19 +635,19 @@ onMounted(() => {
     const group = new THREE.Group()
     const state = { opacity: 0, glow: 0, scale: 0.1 }
     const core = new THREE.Mesh(
-      new THREE.OctahedronGeometry(scale, 0),
+      new THREE.SphereGeometry(scale, 32, 18),
       new THREE.MeshStandardMaterial({
         color,
         emissive: color,
         emissiveIntensity: 0.0,
-        metalness: 0.12,
-        roughness: 0.16,
+        metalness: 0.08,
+        roughness: 0.28,
         transparent: true,
         opacity: 0.0
       })
     )
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(scale * 1.7, scale * 0.1, 12, 44),
+      new THREE.TorusGeometry(scale * 1.62, scale * 0.055, 20, 72),
       new THREE.MeshBasicMaterial({
         color,
         transparent: true,
@@ -503,7 +658,7 @@ onMounted(() => {
     )
     ring.rotation.x = Math.PI * 0.5
     const labelSprite = makeLabelSprite(label, color, options.labelScale ?? 0.65, {
-      maxLength: options.maxLength ?? 12,
+      maxLength: options.maxLength ?? 0,
       fontSize: options.fontSize ?? 40
     })
     if (options.labelOffset) {
@@ -512,6 +667,7 @@ onMounted(() => {
       labelSprite.position.set(0, scale * 2.3, 0)
     }
     group.add(ring, core, labelSprite)
+    ring.visible = options.showRing === true
     group.scale.setScalar(state.scale)
     group.userData = {
       state,
@@ -524,6 +680,7 @@ onMounted(() => {
       labelColor: color
     }
     core.userData.labelOwner = group
+    bindLabelClick(labelSprite, group)
     setObjectOpacity(group, 0)
     return group
   }
@@ -536,7 +693,7 @@ onMounted(() => {
     return new THREE.CatmullRomCurve3(points)
   }
 
-  function buildGrowthLine(points, color, opacity = 0.92, tubeRadius = 0.025) {
+  function buildGrowthLine(points, color, opacity = 0.86, tubeRadius = 0.019) {
     const curve = makeChainCurve(points)
     const tubularSegments = 160
     const radialSegments = 14
@@ -558,14 +715,14 @@ onMounted(() => {
     bloomEffect.selection.add(tube)
 
     // 外层 halo：同曲线、半径 ×2.5、低透明，不进 bloom（纯软光晕）
-    const haloGeo = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius * 2.5, radialSegments, false)
+    const haloGeo = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius * 2.1, radialSegments, false)
     haloGeo.setDrawRange(0, 0)
     const halo = new THREE.Mesh(
       haloGeo,
       new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: opacity * 0.22,
+        opacity: opacity * 0.14,
         blending: THREE.AdditiveBlending,
         depthWrite: false
       })
@@ -594,19 +751,23 @@ onMounted(() => {
     hideLabelTooltip()
     if (activeChain) {
       activeChain.nodes.forEach((node) => {
+        detachLabel(node.userData?.label)
         bloomEffect.selection.delete(node.userData.core)
         outlineEffect.selection.delete(node.userData.core)
       })
       activeChain.branchNodes.forEach((node) => {
+        detachLabel(node.userData?.label)
         bloomEffect.selection.delete(node.userData.core)
         outlineEffect.selection.delete(node.userData.core)
         // 子树节点 / 连线也从 bloom 选区清掉
         ;(node.userData.subtreeNodes || []).forEach((sub) => {
           if (sub.userData?.core) {
+            detachLabel(sub.userData?.label)
             bloomEffect.selection.delete(sub.userData.core)
             outlineEffect.selection.delete(sub.userData.core)
           }
         })
+        hideSubtreeVisuals(node, true)
         ;(node.userData.subtreeLines || []).forEach((lo) => {
           if (lo?.line) bloomEffect.selection.delete(lo.line)
         })
@@ -621,6 +782,7 @@ onMounted(() => {
     sceneState.branchProgress = 0
     // 切换/重置时清空分支详情状态
     focusedBranchNode = null
+    focusedL2Node = null
     savedCamPos = null
     savedLookTarget = null
     branchHitAreas.length = 0
@@ -646,7 +808,9 @@ onMounted(() => {
 
     const nodes = data.chain.main.map((label, index) => {
       const node = createNode(label, data.color.clone().lerp(new THREE.Color(0xffffff), 0.2), 0.4 + index * 0.04, {
-        maxLength: 8,
+        maxLength: 0,
+        fontSize: 42,
+        labelScale: 0.56,
         levelLabel: '主链'
       })
       node.position.copy(mainPoints[index + 1])
@@ -685,7 +849,9 @@ onMounted(() => {
         chainGroup.add(lineObject.line)
         branchLines.push(lineObject)
         const node = createNode(nodeData.name, data.color.clone().lerp(new THREE.Color('#8aa7ff'), 0.46), 0.28, {
-          maxLength: 12,
+          maxLength: 0,
+          fontSize: 36,
+          labelScale: 0.5,
           levelLabel: '分支'
         })
         node.position.copy(end)
@@ -709,12 +875,11 @@ onMounted(() => {
   function activateNode(node) {
     const { state, core, ring, label } = node.userData
     outlineEffect.selection.add(core)
-    bloomEffect.selection.add(core)
-    gsap.to(state, { opacity: 0.95, glow: 1.8, scale: 1, duration: 0.55, ease: 'power2.out', onUpdate: () => {
+    gsap.to(state, { opacity: 0.88, glow: 0.62, scale: 1, duration: 0.55, ease: 'power2.out', onUpdate: () => {
       core.material.opacity = state.opacity
       core.material.emissiveIntensity = state.glow
       ring.material.opacity = state.opacity * 0.65
-      label.material.opacity = state.opacity
+      setLabelOpacity(label, state.opacity)
       node.scale.setScalar(state.scale)
     }})
   }
@@ -768,13 +933,13 @@ onMounted(() => {
     gsap.killTweensOf(state)
     gsap.killTweensOf(node.scale)
     gsap.to(state, {
-      opacity: 0.92, glow: 1.4, scale: scaleTarget,
+      opacity: 0.86, glow: 0.52, scale: scaleTarget,
       duration: 0.36, ease: 'power2.out',
       onUpdate: () => {
         core.material.opacity = state.opacity
         core.material.emissiveIntensity = state.glow
         ring.material.opacity = state.opacity * 0.55
-        label.material.opacity = state.opacity
+        setLabelOpacity(label, state.opacity)
         node.scale.setScalar(state.scale)
       }
     })
@@ -852,9 +1017,9 @@ onMounted(() => {
         const labelOffset = radialDir.clone().multiplyScalar(radialPush)
           .add(new THREE.Vector3(0, yLift, 0))
         const node = createNode(data.name, color.clone(), scale, {
-          maxLength: 8,
-          fontSize: 32,
-          labelScale: 0.50,
+          maxLength: 0,
+          fontSize: level === 2 ? 34 : 30,
+          labelScale: level === 2 ? 0.42 : 0.34,
           labelOffset,
           levelLabel: `L${level}`
         })
@@ -863,7 +1028,7 @@ onMounted(() => {
         node.userData.subtreeLevel = level
         node.userData.l1LocalPos = l1Pos.clone()
         // L3 节点（###）去掉光环，跟 L2 拉开视觉差异 + 减少密集时的视觉噪声
-        if (level === 3 && node.userData.ring) {
+        if (node.userData.ring) {
           node.userData.ring.visible = false
         }
         parent.add(node)
@@ -982,15 +1147,18 @@ onMounted(() => {
     }
     nodes.forEach((sub) => {
       const { state, core, ring, label } = sub.userData
+      sub.visible = true
       gsap.killTweensOf(state)
       gsap.killTweensOf(sub.scale)
       state.opacity = 0; state.glow = 0; state.scale = 0.1
       core.material.opacity = 0
       ring.material.opacity = 0
-      label.material.opacity = 0
+      detachLabel(label)
       sub.scale.setScalar(0.1)
     })
     lines.forEach((lo) => {
+      if (lo.line) lo.line.visible = true
+      if (lo.halo) lo.halo.visible = true
       if (lo.line?.geometry?.setDrawRange) lo.line.geometry.setDrawRange(0, 0)
       if (lo.halo?.geometry?.setDrawRange) lo.halo.geometry.setDrawRange(0, 0)
       if (lo.head) lo.head.visible = false
@@ -1030,17 +1198,57 @@ onMounted(() => {
     })
   }
 
+  function hideSubtreeVisuals(branchNode, killTweens = false) {
+    const nodes = branchNode?.userData?.subtreeNodes || []
+    const lines = branchNode?.userData?.subtreeLines || []
+    nodes.forEach((sub) => {
+      const { state, core, ring, label } = sub.userData || {}
+      if (killTweens) {
+        gsap.killTweensOf(state)
+        gsap.killTweensOf(sub.scale)
+      }
+      if (state) {
+        state.opacity = 0
+        state.glow = 0
+        state.scale = 0.1
+      }
+      if (core?.material) {
+        core.material.opacity = 0
+        core.material.emissiveIntensity = 0
+      }
+      if (ring?.material) ring.material.opacity = 0
+      detachLabel(label)
+      sub.visible = false
+      sub.scale.setScalar(0.1)
+    })
+    lines.forEach((lo) => {
+      if (killTweens) {
+        if (lo.line?.material) gsap.killTweensOf(lo.line.material)
+        if (lo.halo?.material) gsap.killTweensOf(lo.halo.material)
+      }
+      if (lo.line?.geometry?.setDrawRange) lo.line.geometry.setDrawRange(0, 0)
+      if (lo.halo?.geometry?.setDrawRange) lo.halo.geometry.setDrawRange(0, 0)
+      if (lo.head) lo.head.visible = false
+      if (lo.line?.material) lo.line.material.opacity = 0
+      if (lo.halo?.material) lo.halo.material.opacity = 0
+      if (lo.line) lo.line.visible = false
+      if (lo.halo) lo.halo.visible = false
+    })
+  }
+
   function collapseSubtree(branchNode) {
     if (branchNode.userData.subtreeTl) {
       branchNode.userData.subtreeTl.kill()
       branchNode.userData.subtreeTl = null
     }
+    focusedL2Node = null
     const nodes = branchNode.userData.subtreeNodes || []
     const lines = branchNode.userData.subtreeLines || []
     nodes.forEach((sub) => {
       const { state, core, ring, label } = sub.userData
       gsap.killTweensOf(state)
       gsap.killTweensOf(sub.scale)
+      detachLabel(label)
       gsap.to(state, {
         opacity: 0, glow: 0, scale: 0.1,
         duration: 0.26, ease: 'power2.in',
@@ -1048,8 +1256,10 @@ onMounted(() => {
           core.material.opacity = state.opacity
           core.material.emissiveIntensity = state.glow
           ring.material.opacity = state.opacity * 0.55
-          label.material.opacity = state.opacity
           sub.scale.setScalar(state.scale)
+        },
+        onComplete: () => {
+          sub.visible = false
         }
       })
     })
@@ -1062,6 +1272,8 @@ onMounted(() => {
             if (lo.line?.geometry?.setDrawRange) lo.line.geometry.setDrawRange(0, 0)
             if (lo.halo?.geometry?.setDrawRange) lo.halo.geometry.setDrawRange(0, 0)
             if (lo.head) lo.head.visible = false
+            if (lo.line) lo.line.visible = false
+            if (lo.halo) lo.halo.visible = false
           }
         })
       }
@@ -1077,21 +1289,21 @@ onMounted(() => {
     const { state, core, ring, label } = node.userData
     gsap.killTweensOf(state)
     gsap.to(state, {
-      opacity: on ? 1 : 0.95, glow: on ? 2.6 : 1.8,
+      opacity: on ? 0.9 : 0.84, glow: on ? 0.76 : 0.56,
       duration: 0.28, ease: 'power2.out',
       onUpdate: () => {
         core.material.opacity = state.opacity
         core.material.emissiveIntensity = state.glow
         ring.material.opacity = state.opacity * (on ? 0.95 : 0.65)
-        label.material.opacity = state.opacity
+        setLabelOpacity(label, state.opacity)
       }
     })
   }
 
   function dimSurroundings(dim) {
     if (!activeChain) return
-    const targetOpacity = dim ? 0.22 : 0.95
-    const targetGlow = dim ? 0.55 : 1.4
+    const targetOpacity = dim ? 0.2 : 0.84
+    const targetGlow = dim ? 0.28 : 0.54
     ;[...activeChain.nodes, ...activeChain.branchNodes].forEach((node) => {
       if (node === focusedBranchNode) return
       const { state, core, ring, label } = node.userData
@@ -1103,7 +1315,7 @@ onMounted(() => {
           core.material.opacity = state.opacity
           core.material.emissiveIntensity = state.glow
           ring.material.opacity = state.opacity * 0.55
-          label.material.opacity = state.opacity
+          setLabelOpacity(label, state.opacity)
         }
       })
     })
@@ -1160,7 +1372,7 @@ onMounted(() => {
         core.material.opacity = state.opacity
         core.material.emissiveIntensity = state.glow
         ring.material.opacity = state.opacity * 0.55
-        label.material.opacity = state.opacity
+        setLabelOpacity(label, state.opacity)
       }
     })
   }
@@ -1283,6 +1495,10 @@ onMounted(() => {
     if (currentTimeline) currentTimeline.kill()
     const chain = buildChainForSector(sector)
     const color = sector.userData.data.color
+    const queryChain = getQueryableChainName(sector)
+    if (orgDrawer.visible && queryChain && orgDrawer.chain !== queryChain) {
+      loadOrgDrawer(queryChain, getOwnerLevel(sector), 1)
+    }
 
     statusTitle.value = sector.userData.data.name
     statusBody.value = '已锁定该扇区。扇区压缩为左侧锚点，主链节点向右生长，分支节点随后在其周围展开。点击子节点可展开下一级，Esc 返回上一级。'
@@ -1300,10 +1516,10 @@ onMounted(() => {
         item.visible = true   // 切换聚焦目标时，新聚焦的球可能上一轮被 visible=false，先打开
         currentTimeline.to(item.position, { x: -4.1, y: 0.18, z: 1.2, duration: 1.15 }, 0)
         currentTimeline.to(item.scale, { x: 0.94, y: 0.94, z: 0.94, duration: 1.15 }, 0)
-        currentTimeline.to(state, { opacity: 0.94, glow: 1.19, duration: 1.15, onUpdate: () => {
+        currentTimeline.to(state, { opacity: 0.82, glow: 0.42, duration: 1.15, onUpdate: () => {
           item.userData.shell.material.opacity = state.opacity
           item.userData.shell.material.emissiveIntensity = state.glow
-          item.userData.label.material.opacity = 0.9
+          setLabelOpacity(item.userData.label, 0.9)
         }}, 0)
       } else {
         // 聚焦时其它产业球完全隐藏：fade 到 alpha 0，动画结束后整组设 visible=false，
@@ -1322,7 +1538,7 @@ onMounted(() => {
             const s = item.userData.state
             item.userData.shell.material.opacity = s.opacity
             item.userData.shell.material.emissiveIntensity = s.glow
-            item.userData.label.material.opacity = s.opacity
+            setLabelOpacity(item.userData.label, s.opacity)
           },
           onComplete: () => { item.visible = false },
         }, 0)
@@ -1397,10 +1613,10 @@ onMounted(() => {
       const state = sector.userData.state
       gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: 1.05, ease: 'power3.out' })
       gsap.to(sector.scale, { x: 1.18, y: 1.18, z: 1.18, duration: 1.05, ease: 'power3.out' })
-      gsap.to(state, { opacity: 1, glow: 0.88, duration: 1.05, ease: 'power3.out', onUpdate: () => {
+      gsap.to(state, { opacity: 0.82, glow: 0.38, duration: 1.05, ease: 'power3.out', onUpdate: () => {
         sector.userData.shell.material.opacity = state.opacity
         sector.userData.shell.material.emissiveIntensity = state.glow
-        sector.userData.label.material.opacity = 0.96
+        setLabelOpacity(sector.userData.label, 0.96)
       }})
     })
   }
@@ -1468,6 +1684,17 @@ onMounted(() => {
   }
 
   // 鼠标悬浮时附加的信息：GICS 编号 / 段数 / 子项数，让用户对深度有预期
+  function getQueryableChainName(owner) {
+    const title = String(getOwnerTitle(owner) || '').trim()
+    return queryableChainNames.has(title) ? title : ''
+  }
+
+  function openOrgDrawerForOwner(owner) {
+    const chain = getQueryableChainName(owner)
+    if (!chain) return
+    loadOrgDrawer(chain, getOwnerLevel(owner), 1)
+  }
+
   function getOwnerMeta(owner) {
     if (!owner) return ''
     const ud = owner.userData
@@ -1520,7 +1747,94 @@ onMounted(() => {
     labelTooltip.visible = false
   }
 
+  function canNavigateScene() {
+    return !!sceneState.focusedSector && !sceneState.busy
+  }
+
+  function isStagePointerEvent(event) {
+    return event.composedPath?.().includes(stage) || event.target === renderer.domElement
+  }
+
+  function stopCameraMotion() {
+    gsap.killTweensOf(camera.position)
+    gsap.killTweensOf(lookTarget)
+  }
+
+  function clampLookTarget(nextTarget) {
+    nextTarget.x = THREE.MathUtils.clamp(nextTarget.x, -7.5, 9.5)
+    nextTarget.y = THREE.MathUtils.clamp(nextTarget.y, -3.2, 4.6)
+    nextTarget.z = THREE.MathUtils.clamp(nextTarget.z, -7.2, 3.2)
+    return nextTarget
+  }
+
+  function panCameraByPixels(dx, dy) {
+    if (!canNavigateScene()) return
+    stopCameraMotion()
+    camera.updateMatrixWorld()
+
+    const rect = stage.getBoundingClientRect()
+    const distance = camera.position.distanceTo(lookTarget)
+    const viewHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * distance
+    const viewWidth = viewHeight * camera.aspect
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize()
+    const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize()
+    const pan = right
+      .multiplyScalar((-dx / Math.max(1, rect.width)) * viewWidth)
+      .add(up.multiplyScalar((dy / Math.max(1, rect.height)) * viewHeight))
+    const nextTarget = clampLookTarget(lookTarget.clone().add(pan))
+    const actualPan = nextTarget.sub(lookTarget)
+
+    camera.position.add(actualPan)
+    lookTarget.add(actualPan)
+    lookTargetProxy.add(actualPan)
+  }
+
+  function zoomCameraByWheel(deltaY) {
+    if (!canNavigateScene()) return
+    stopCameraMotion()
+
+    const viewDir = new THREE.Vector3().subVectors(camera.position, lookTarget).normalize()
+    const currentDistance = camera.position.distanceTo(lookTarget)
+    const nextDistance = THREE.MathUtils.clamp(currentDistance * Math.exp(deltaY * 0.001), 4.2, 18)
+    camera.position.copy(lookTarget).add(viewDir.multiplyScalar(nextDistance))
+  }
+
+  function updatePointerCursor(hit) {
+    if (navState.dragging) {
+      stage.style.cursor = 'grabbing'
+      return
+    }
+    const canClickBranch = sceneState.focusedSector && !sceneState.busy && hit?.object?.userData?.branchOwner
+    const canClickSector = !sceneState.focusedSector && hit?.object?.userData?.owner
+    if (canClickBranch || canClickSector) {
+      stage.style.cursor = 'pointer'
+    } else if (canNavigateScene()) {
+      stage.style.cursor = 'grab'
+    } else {
+      stage.style.cursor = ''
+    }
+  }
+
   function onPointerMove(event) {
+    if (navState.dragging && event.pointerId === navState.pointerId) {
+      const dx = event.clientX - navState.lastX
+      const dy = event.clientY - navState.lastY
+      if (Math.abs(event.clientX - navState.startX) + Math.abs(event.clientY - navState.startY) > 5) {
+        navState.moved = true
+      }
+      navState.lastX = event.clientX
+      navState.lastY = event.clientY
+      panCameraByPixels(dx, dy)
+      hideLabelTooltip()
+      updatePointerCursor()
+      return
+    }
+
+    if (!isStagePointerEvent(event)) {
+      hideLabelTooltip()
+      return
+    }
+
     const p = pointerToNDC(event)
     hoverTarget.x = p.x
     hoverTarget.y = p.y
@@ -1536,17 +1850,19 @@ onMounted(() => {
       hideLabelTooltip()
     }
 
-    const canClickBranch = sceneState.focusedSector && !sceneState.busy && hit?.object?.userData?.branchOwner
-    const canClickSector = !sceneState.focusedSector && hit?.object?.userData?.owner
-    stage.style.cursor = canClickBranch || canClickSector ? 'pointer' : ''
+    updatePointerCursor(hit)
   }
 
-  function onPointerDown(event) {
+  function handleSceneClick(event) {
+    if (!isStagePointerEvent(event)) return
     hideLabelTooltip()
     const p = pointerToNDC(event)
     pointer.x = p.x
     pointer.y = p.y
     raycaster.setFromCamera(pointer, camera)
+    const primaryHit = raycaster.intersectObjects(getLabelHitAreas(), false)[0]
+    const primaryOwner = getLabelOwner(primaryHit)
+    if (primaryOwner) openOrgDrawerForOwner(primaryOwner)
     // 已聚焦 L1 → 先检测 L2 子节点点击（聚焦该路径，其它兄弟 L2 + 它们的 L3 变透明）
     if (sceneState.focusedSector && !sceneState.busy && focusedBranchNode) {
       const l2Areas = getSubtreeHitAreas()
@@ -1576,12 +1892,61 @@ onMounted(() => {
     }
   }
 
+  function onPointerDown(event) {
+    if (event.button !== 0) return
+    if (!isStagePointerEvent(event)) return
+    navState.dragging = canNavigateScene()
+    navState.pointerId = event.pointerId
+    navState.startX = event.clientX
+    navState.startY = event.clientY
+    navState.lastX = event.clientX
+    navState.lastY = event.clientY
+    navState.moved = false
+    hideLabelTooltip()
+    if (navState.dragging && stage.setPointerCapture) {
+      stage.setPointerCapture(event.pointerId)
+      updatePointerCursor()
+    }
+  }
+
+  function onPointerUp(event) {
+    const wasDragging = navState.dragging && event.pointerId === navState.pointerId
+    const wasMoved = navState.moved
+    if (wasDragging && stage.releasePointerCapture) {
+      stage.releasePointerCapture(event.pointerId)
+    }
+    navState.dragging = false
+    navState.pointerId = null
+    navState.moved = false
+    updatePointerCursor()
+    if (!wasMoved) handleSceneClick(event)
+  }
+
+  function onPointerCancel(event) {
+    if (navState.dragging && event.pointerId === navState.pointerId && stage.releasePointerCapture) {
+      stage.releasePointerCapture(event.pointerId)
+    }
+    navState.dragging = false
+    navState.pointerId = null
+    navState.moved = false
+    updatePointerCursor()
+  }
+
+  function onWheel(event) {
+    if (!canNavigateScene() || !isStagePointerEvent(event)) return
+    event.preventDefault()
+    zoomCameraByWheel(event.deltaY)
+    hideLabelTooltip()
+  }
+
   function onResize() {
     const { width, height } = getStageSize()
     camera.aspect = width / height
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     composer.setSize(width, height)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5))
+    labelRenderer.setSize(width, height)
   }
 
   function onKeydown(event) {
@@ -1601,6 +1966,9 @@ onMounted(() => {
   window.addEventListener('resize', onResize)
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerdown', onPointerDown)
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', onPointerCancel)
+  window.addEventListener('wheel', onWheel, { passive: false })
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('dblclick', onDblClick)
 
@@ -1625,13 +1993,13 @@ onMounted(() => {
       sector.position.y += (targetY - sector.position.y) * 0.04
       sector.position.z += (targetZ - sector.position.z) * 0.018
       sector.userData.shell.position.y = Math.sin(elapsed * 1.15 + index) * 0.14
-      sector.userData.label.position.y = 2.58 + Math.sin(elapsed * 1.15 + index) * 0.12
+      sector.userData.label.position.y = 2.52
     })
 
     if (sceneState.focusedSector) {
       const focus = sceneState.focusedSector
       focus.userData.shell.position.y = Math.sin(elapsed * 2.2) * 0.08
-      focus.userData.label.position.y = 2.25 + Math.sin(elapsed * 2.2) * 0.12
+      focus.userData.label.position.y = 2.22
     }
 
     const parallaxX = hoverTarget.x * 0.36
@@ -1658,7 +2026,7 @@ onMounted(() => {
       activeChain.nodes.concat(activeChain.branchNodes).forEach((node, index) => {
         // 主链/分支节点只漂浮，不旋转
         if (node === focusedBranchNode) return
-        node.position.y += Math.sin(elapsed * 1.8 + index * 0.55) * 0.0015
+        node.userData.core.position.y = Math.sin(elapsed * 1.8 + index * 0.55) * 0.018
       })
       // 当前展开的子树节点：每帧轻微上下漂浮（不旋转），相位各异避免同步
       if (focusedBranchNode?.userData?.subtreeNodes) {
@@ -1667,7 +2035,7 @@ onMounted(() => {
             sub.userData.baseY = sub.position.y
             sub.userData.floatPhase = Math.random() * Math.PI * 2
           }
-          sub.position.y = sub.userData.baseY + Math.sin(elapsed * 1.4 + sub.userData.floatPhase) * 0.05
+          sub.userData.core.position.y = Math.sin(elapsed * 1.4 + sub.userData.floatPhase) * 0.018
         })
       }
     }
@@ -1675,6 +2043,7 @@ onMounted(() => {
     stars.rotation.y += 0.0005
     tunnel.position.z = -Math.sin(elapsed * 0.18) * 0.4
     composer.render()
+    labelRenderer.render(scene, camera)
     rafId = requestAnimationFrame(render)
   }
 
@@ -1693,6 +2062,9 @@ onMounted(() => {
     window.removeEventListener('resize', onResize)
     window.removeEventListener('pointermove', onPointerMove)
     window.removeEventListener('pointerdown', onPointerDown)
+    window.removeEventListener('pointerup', onPointerUp)
+    window.removeEventListener('pointercancel', onPointerCancel)
+    window.removeEventListener('wheel', onWheel)
     window.removeEventListener('keydown', onKeydown)
     window.removeEventListener('dblclick', onDblClick)
     scene.traverse((obj) => {
@@ -1708,6 +2080,7 @@ onMounted(() => {
     composer.dispose()
     renderer.dispose()
     if (renderer.domElement.parentNode === stage) stage.removeChild(renderer.domElement)
+    if (labelRenderer.domElement.parentNode === stage) stage.removeChild(labelRenderer.domElement)
   }
 })
 
@@ -1722,15 +2095,50 @@ onBeforeUnmount(() => cleanup())
   background: radial-gradient(circle at top, #081628 0%, #020711 56%, #01040a 100%);
   font-family: "Segoe UI", "PingFang SC", sans-serif;
   color: rgba(235, 246, 255, 0.96);
+  --org-drawer-width: 460px;
 }
 
 .blueprint-stage {
   position: absolute;
   inset: 0;
+  touch-action: none;
+  transition: transform 0.28s ease;
+  transform-origin: center center;
+}
+
+.blueprint-root.is-org-drawer-open .blueprint-stage {
+  transform: translateX(calc(var(--org-drawer-width) * -0.42));
 }
 
 .blueprint-stage :deep(canvas) {
   display: block;
+}
+
+.blueprint-stage :deep(.blueprint-label-layer) {
+  z-index: 2;
+}
+
+.blueprint-stage :deep(.blueprint-label) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 13px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 44%, transparent);
+  border-radius: 8px;
+  background: rgba(7, 17, 31, 0.78);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 6px 16px rgba(0,0,0,0.24), 0 0 14px var(--accent-soft);
+  color: #dcecff;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  letter-spacing: 0;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.62);
+  pointer-events: none;
+  user-select: none;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: transform, opacity;
 }
 
 .blueprint-node-tooltip {
@@ -1788,6 +2196,212 @@ onBeforeUnmount(() => cleanup())
   color: rgba(170, 220, 250, 0.78);
 }
 
+.blueprint-org-drawer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 16;
+  width: min(var(--org-drawer-width), calc(100vw - 20px));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(111, 187, 255, 0.28);
+  border-right: 0;
+  border-radius: 20px 0 0 20px;
+  background: linear-gradient(180deg, rgba(9, 23, 42, 0.94), rgba(4, 13, 25, 0.88));
+  box-shadow: 0 22px 52px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+}
+
+.blueprint-org-drawer-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid rgba(129, 190, 255, 0.16);
+}
+
+.blueprint-org-drawer-head span,
+.blueprint-org-drawer-head em {
+  display: block;
+  font-size: 12px;
+  color: rgba(171, 213, 245, 0.75);
+  font-style: normal;
+}
+
+.blueprint-org-drawer-head strong {
+  display: block;
+  margin: 6px 0;
+  font-size: 20px;
+  line-height: 1.25;
+  color: rgba(242, 249, 255, 0.98);
+}
+
+.blueprint-org-drawer-head button {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid rgba(138, 200, 255, 0.32);
+  background: rgba(5, 17, 31, 0.78);
+  color: rgba(226, 242, 255, 0.9);
+  font-size: 21px;
+  cursor: pointer;
+}
+
+.blueprint-org-search-line,
+.blueprint-org-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(129, 190, 255, 0.1);
+  color: rgba(228, 244, 255, 0.9);
+  font-size: 13px;
+}
+
+.blueprint-org-search-line small {
+  color: rgba(162, 202, 234, 0.62);
+}
+
+.blueprint-org-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(118, 188, 255, 0.62) rgba(8, 22, 40, 0.36);
+}
+
+.blueprint-org-list::-webkit-scrollbar {
+  width: 7px;
+}
+
+.blueprint-org-list::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(8, 22, 40, 0.36);
+}
+
+.blueprint-org-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(91, 178, 255, 0.88), rgba(82, 215, 255, 0.5));
+  border: 2px solid rgba(8, 22, 40, 0.36);
+}
+
+.blueprint-org-list::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(129, 207, 255, 0.96), rgba(88, 228, 255, 0.68));
+}
+
+.blueprint-org-card {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(115, 184, 255, 0.16);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(13, 32, 56, 0.72), rgba(7, 18, 34, 0.6));
+}
+
+.blueprint-org-card + .blueprint-org-card {
+  margin-top: 10px;
+}
+
+.blueprint-org-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2f86ff, #52d7ff);
+  color: white;
+  font-weight: 800;
+  box-shadow: 0 0 22px rgba(72, 186, 255, 0.32);
+}
+
+.blueprint-org-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.blueprint-org-title strong {
+  font-size: 14px;
+  line-height: 1.35;
+  color: rgba(241, 248, 255, 0.97);
+}
+
+.blueprint-org-title span {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(51, 213, 158, 0.14);
+  color: #84f2c6;
+  font-size: 11px;
+}
+
+.blueprint-org-main p {
+  margin: 7px 0 0;
+  color: rgba(182, 211, 232, 0.74);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.blueprint-org-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.blueprint-org-tags span {
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: rgba(46, 129, 255, 0.14);
+  color: rgba(158, 211, 255, 0.92);
+  font-size: 11px;
+}
+
+.blueprint-org-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 9px;
+  color: rgba(200, 225, 241, 0.7);
+  font-size: 12px;
+}
+
+.blueprint-org-empty {
+  margin: 18px;
+  padding: 28px 16px;
+  border: 1px dashed rgba(134, 198, 255, 0.25);
+  border-radius: 14px;
+  text-align: center;
+  color: rgba(191, 220, 241, 0.72);
+}
+
+.blueprint-org-pager {
+  padding: 12px 16px 14px;
+  border-top: 1px solid rgba(129, 190, 255, 0.12);
+  border-bottom: 0;
+  color: rgba(198, 225, 244, 0.75);
+}
+
+.blueprint-org-pager button {
+  min-width: 76px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 193, 255, 0.28);
+  background: rgba(14, 43, 77, 0.68);
+  color: rgba(232, 245, 255, 0.88);
+  cursor: pointer;
+}
+
+.blueprint-org-pager button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 .blueprint-hud {
   position: absolute;
   top: 20px;
@@ -1797,6 +2411,14 @@ onBeforeUnmount(() => cleanup())
   display: flex;
   align-items: flex-start;
   gap: 10px;
+}
+
+.blueprint-root.is-org-drawer-open .blueprint-hud {
+  top: auto;
+  right: auto;
+  left: 20px;
+  bottom: 96px;
+  flex-direction: column;
 }
 
 .blueprint-back-btn {
@@ -2001,6 +2623,12 @@ onBeforeUnmount(() => cleanup())
   align-items: center;
   z-index: 5;
   pointer-events: none;
+}
+
+.blueprint-root.is-org-drawer-open .blueprint-footer {
+  right: auto;
+  left: 20px;
+  bottom: 18px;
 }
 
 .blueprint-legend,
