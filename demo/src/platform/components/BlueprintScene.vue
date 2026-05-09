@@ -76,6 +76,21 @@
         <span>企业列表</span>
         <small>点击球体或标签切换节点</small>
       </div>
+      <div class="blueprint-org-filter-row">
+        <select v-model="orgDrawer.filters.province" :disabled="orgDrawer.loading" @change="onOrgProvinceChange">
+          <option value="">全国</option>
+          <option v-for="province in orgProvinceOptions" :key="province.code" :value="province.name">{{ province.name }}</option>
+        </select>
+        <select v-model="orgDrawer.filters.city" :disabled="orgDrawer.loading || !orgDrawer.filters.province" @change="onOrgCityChange">
+          <option value="">全部城市</option>
+          <option v-for="city in getOrgCityOptions(orgDrawer.filters.province)" :key="city.code" :value="city.name">{{ city.name }}</option>
+        </select>
+        <button
+          type="button"
+          :disabled="orgDrawer.loading || (!orgDrawer.filters.province && !orgDrawer.filters.city)"
+          @click="resetOrgRegionFilter"
+        >重置</button>
+      </div>
       <div v-if="orgDrawer.error" class="blueprint-org-empty">{{ orgDrawer.error }}</div>
       <div v-else-if="orgDrawer.loading" class="blueprint-org-empty">正在获取企业数据...</div>
       <div v-else-if="!orgDrawer.items.length" class="blueprint-org-empty">暂无相关企业</div>
@@ -137,6 +152,7 @@ import {
   ShockWaveEffect
 } from 'postprocessing'
 import { industryChainGraphData, sectorList } from '../data/industry-chain-graph.js'
+import { chinaGeo, getProvinceChildren } from '../data/map-scene-data.js'
 import { searchChainOrgs } from '../../api/chainOrg.js'
 
 const emit = defineEmits(['exit'])
@@ -166,6 +182,10 @@ const orgDrawer = reactive({
   pageSize: 8,
   items: [],
   requestId: 0,
+  filters: {
+    province: '',
+    city: '',
+  },
 })
 
 function closeOrgDrawer() {
@@ -187,7 +207,13 @@ async function loadOrgDrawer(chain, level = '', page = 1) {
   orgDrawer.page = page
 
   try {
-    const data = await searchChainOrgs({ chain: keyword, page, pageSize: orgDrawer.pageSize })
+    const data = await searchChainOrgs({
+      chain: keyword,
+      province: normalizeOrgProvinceName(orgDrawer.filters.province),
+      city: orgDrawer.filters.city,
+      page,
+      pageSize: orgDrawer.pageSize,
+    })
     if (requestId !== orgDrawer.requestId) return
     orgDrawer.total = data.total
     orgDrawer.page = data.page
@@ -204,6 +230,26 @@ async function loadOrgDrawer(chain, level = '', page = 1) {
   }
 }
 
+function reloadOrgDrawerWithFilters() {
+  if (!orgDrawer.chain) return
+  loadOrgDrawer(orgDrawer.chain, orgDrawer.level, 1)
+}
+
+function onOrgProvinceChange() {
+  orgDrawer.filters.city = ''
+  reloadOrgDrawerWithFilters()
+}
+
+function onOrgCityChange() {
+  reloadOrgDrawerWithFilters()
+}
+
+function resetOrgRegionFilter() {
+  orgDrawer.filters.province = ''
+  orgDrawer.filters.city = ''
+  reloadOrgDrawerWithFilters()
+}
+
 let resetSceneFn = () => {}
 const onReset = () => resetSceneFn()
 let goBackFn = () => {}
@@ -216,6 +262,34 @@ const sectorMenu = sectorList.map((s) => ({
   colorHex: s.colorHex,
   groupKey: s.groupKey,
 }))
+
+const orgProvinceOptions = chinaGeo.features
+  .map((feature) => ({
+    code: String(feature.properties?.adcode || ''),
+    name: String(feature.properties?.name || ''),
+  }))
+  .filter((item) => item.code && item.name)
+  .sort((a, b) => a.code.localeCompare(b.code))
+
+const orgProvinceCodeByName = new Map(orgProvinceOptions.map((item) => [item.name, item.code]))
+
+function getOrgCityOptions(provinceName) {
+  const code = orgProvinceCodeByName.get(provinceName)
+  if (!code) return []
+  return getProvinceChildren(code)
+    .map((item) => ({
+      code: String(item.adcode || ''),
+      name: String(item.name || ''),
+    }))
+    .filter((item) => item.code && item.name)
+}
+
+function normalizeOrgProvinceName(name) {
+  return String(name || '')
+    .replace(/(壮族|回族|维吾尔)?自治区$/, '')
+    .replace(/特别行政区$/, '')
+    .replace(/[省市]$/, '')
+}
 
 function isStructureChainName(name) {
   const value = String(name || '').trim()
@@ -2264,6 +2338,70 @@ onBeforeUnmount(() => cleanup())
 
 .blueprint-org-search-line small {
   color: rgba(162, 202, 234, 0.62);
+}
+
+.blueprint-org-filter-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  padding: 10px 18px 12px;
+  border-bottom: 1px solid rgba(129, 190, 255, 0.1);
+  background: rgba(6, 18, 34, 0.22);
+}
+
+.blueprint-org-filter-row select,
+.blueprint-org-filter-row button {
+  height: 32px;
+  min-width: 0;
+  border: 1px solid rgba(127, 193, 255, 0.24);
+  border-radius: 10px;
+  color: rgba(232, 245, 255, 0.9);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.blueprint-org-filter-row select {
+  appearance: none;
+  padding: 0 30px 0 10px;
+  background-color: rgba(9, 25, 45, 0.78);
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(158, 211, 255, 0.92) 50%),
+    linear-gradient(135deg, rgba(158, 211, 255, 0.92) 50%, transparent 50%);
+  background-position:
+    calc(100% - 15px) 13px,
+    calc(100% - 10px) 13px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+}
+
+.blueprint-org-filter-row option {
+  background: #081729;
+  color: #e8f5ff;
+}
+
+.blueprint-org-filter-row button {
+  padding: 0 12px;
+  background: rgba(14, 43, 77, 0.68);
+  cursor: pointer;
+}
+
+.blueprint-org-filter-row select:hover,
+.blueprint-org-filter-row button:hover:not(:disabled),
+.blueprint-org-filter-row select:focus-visible,
+.blueprint-org-filter-row button:focus-visible {
+  border-color: rgba(127, 210, 255, 0.52);
+  background-color: rgba(13, 39, 68, 0.92);
+  box-shadow: 0 0 0 2px rgba(72, 186, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.blueprint-org-filter-row select:disabled,
+.blueprint-org-filter-row button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .blueprint-org-list {
