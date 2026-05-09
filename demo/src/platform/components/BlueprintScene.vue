@@ -869,8 +869,11 @@ onMounted(() => {
         parent.add(node)
         placedNodes.push(node)
 
+        // 中点沿 axisSide 抬一点点，但方向跟节点所在半区一致（上面的往上抬、下面的往下抬）
+        // 这样每条线朝自己外侧弓出去，不会经过中心绕行 → 不交叉但有曲线感
+        const sideSign = pos.dot(axisSide) >= 0 ? 1 : -1
         const mid = new THREE.Vector3().lerpVectors(new THREE.Vector3(), pos, 0.55)
-          .addScaledVector(axisUp, lineMidLift)
+          .addScaledVector(axisSide, lineMidLift * sideSign)
           .addScaledVector(axisDepth, 0.06)
         const lineObj = buildSubtreeGrowthLine(
           [new THREE.Vector3(0, 0, 0), mid, pos], lineColor, parent, lineRadius
@@ -893,13 +896,15 @@ onMounted(() => {
       spread: Math.PI * 1.5,
       baseRadius: l2BaseRadius,
       depthBase: 0,
-      depthStep: 0.18,
+      // 去掉 L2 的 Z stagger：所有 L2 节点都在 XY 平面，避免标签径向方向倾斜飘出
+      depthStep: 0,
       scale: 0.18,
       color: l2Color,
       lineColor: lineColorL2,
       lineRadius: 0.012,
       minDist: 1.6,
-      lineMidLift: 0.2,
+      // L2 连线沿 axisSide 抬中点（带符号），每条线朝自己外侧弓出去，不交叉
+      lineMidLift: 0.25,
       level: 2,
       parentL1Pos: new THREE.Vector3(0, 0, 0),
     })
@@ -920,10 +925,12 @@ onMounted(() => {
       const l3 = placeFan(l2Node, l3List, {
         axisUp: tiltedUp3, axisSide: tiltedSide3, axisDepth: fwdX,
         spread: Math.PI * 0.5, baseRadius: l3BaseRadius,
-        depthBase: 0.3, depthStep: 0.13,
+        // L3 保留沿 fwdX 的 depth（让 L3 从 L2 向外伸，跟 L2 不重合），但去掉 i*step 的渐进偏移
+        depthBase: 0.3, depthStep: 0,
         scale: 0.13, color: l3Color,
         lineColor: l2Color.clone().lerp(new THREE.Color('#a3b8ff'), 0.5),
-        lineRadius: 0.008, minDist: 1.15, lineMidLift: 0.14, level: 3,
+        // L3 连线同样沿 axisSide 带符号弓出（spread 90° 已经不容易交叉，但保留曲线感）
+        lineRadius: 0.008, minDist: 1.15, lineMidLift: 0.16, level: 3,
         parentL1Pos: l2Node.userData.l1LocalPos,
       })
       subtreeNodes.push(...l3.nodes)
