@@ -165,14 +165,14 @@
     </aside>
 
     <div class="blueprint-footer">
-      <div class="blueprint-legend">
+      <div v-if="viewState === 'scene'" class="blueprint-legend">
         <span><i class="blueprint-dot" style="color:#86e4ff"></i>主链</span>
         <span><i class="blueprint-dot" style="color:#78a3ff"></i>分支</span>
         <span><i class="blueprint-dot" style="color:#fff4c4"></i>脉冲</span>
       </div>
       <div class="blueprint-actions">
-        <span>Esc 重置/返回上一级</span>
-        <button type="button" @click="onReset">返回总览</button>
+        <span v-if="viewState === 'scene'">Esc 重置/返回上一级</span>
+        <button v-if="viewState === 'scene'" type="button" @click="onReset">返回总览</button>
         <button type="button" class="blueprint-back" @click="emit('exit')">← 返回首页</button>
       </div>
     </div>
@@ -724,6 +724,8 @@ onMounted(() => {
     const basePosition = data.position.clone()
     const orbitOffset = basePosition.clone().sub(orbitCenter)
     group.userData.basePosition = basePosition
+    // currentBase = 当前"靠拢点"。全产业模式下等于 basePosition；filtered 模式下被重排到场景中心椭球
+    group.userData.currentBase = basePosition.clone()
     group.userData.orbitRadius = Math.hypot(orbitOffset.x, orbitOffset.z)
     group.userData.orbitAngle = Math.atan2(orbitOffset.z, orbitOffset.x)
     group.userData.orbitYOffset = basePosition.y
@@ -1670,6 +1672,13 @@ onMounted(() => {
       savedCamPos = null
       savedLookTarget = null
     }
+    // 退回 L1 后，右侧抽屉应该跟随回到当前聚焦的主产业
+    if (orgDrawer.visible && sceneState.focusedSector) {
+      const sectorChain = getQueryableChainName(sceneState.focusedSector)
+      if (sectorChain && orgDrawer.chain !== sectorChain) {
+        loadOrgDrawer(sectorChain, '产业', 1)
+      }
+    }
   }
 
   function focusSector(sector) {
@@ -1695,7 +1704,8 @@ onMounted(() => {
     currentTimeline = gsap.timeline({ defaults: { ease: 'power3.inOut' }, onComplete: () => { sceneState.busy = false } })
 
     sectors.forEach((item) => {
-      const base = item.userData.basePosition.clone()
+      // 推开方向用 currentBase（filter 模式下也朝中心椭球的对应位置外推，避免推到屏幕外乱跑）
+      const base = item.userData.currentBase.clone()
       const state = item.userData.state
       if (item === sector) {
         item.visible = true   // 切换聚焦目标时，新聚焦的球可能上一轮被 visible=false，先打开
@@ -1781,6 +1791,8 @@ onMounted(() => {
     sceneState.busy = false
     sceneState.focusedSector = null
     activeSectorKey.value = null
+    // 回到 50/N 球总览：右侧抽屉无锁定对象，直接关掉
+    if (orgDrawer.visible) closeOrgDrawer()
     sceneState.mainProgress = 0
     sceneState.branchProgress = 0
     driftTarget.set(0, 0, 0)
@@ -1810,7 +1822,8 @@ onMounted(() => {
         return
       }
       sector.visible = true   // 之前可能因聚焦被 visible=false 隐藏，回到总览先打开
-      const base = sector.userData.basePosition
+      // filter 模式下 currentBase 已重排到中心小椭球；全产业则 currentBase = 原始 basePosition
+      const base = sector.userData.currentBase
       const state = sector.userData.state
       gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: 1.05, ease: 'power3.out' })
       gsap.to(sector.scale, { x: 1.18, y: 1.18, z: 1.18, duration: 1.05, ease: 'power3.out' })
@@ -1822,6 +1835,52 @@ onMounted(() => {
         },
         onComplete: () => { sector.userData.activated = true }
       })
+    })
+  }
+
+  // ── 方案 B：filtered 模式下用中心小椭球重排，避免少量球被挤到原大球面顶部 ──
+  // groupKey=null 时直接把每个球的 currentBase 恢复成原始 basePosition（全产业模式）
+  function applyLayoutForFilter(groupKey) {
+    if (!groupKey) {
+      sectors.forEach((s) => {
+        s.userData.currentBase.copy(s.userData.basePosition)
+        const off = s.userData.basePosition.clone().sub(orbitCenter)
+        s.userData.orbitRadius = Math.hypot(off.x, off.z)
+        s.userData.orbitAngle = Math.atan2(off.z, off.x)
+        s.userData.orbitYOffset = s.userData.basePosition.y
+      })
+      return
+    }
+    const matching = sectors.filter((s) => s.userData.data.groupKey === groupKey)
+    const N = matching.length
+    if (!N) return
+    // 中心对齐 overviewLookBase 附近；半径随 N 缓涨，扁度 ry 较小防止上下太空
+    const center = new THREE.Vector3(0, 0.4, -0.2)
+    const rx = N <= 3 ? 2.2 : N <= 6 ? 3.0 : 3.7
+    const ry = N <= 3 ? 0.7 : N <= 6 ? 1.15 : 1.45
+    const rz = N <= 3 ? 2.2 : N <= 6 ? 3.0 : 3.7
+    const golden = Math.PI * (3 - Math.sqrt(5))
+    matching.forEach((s, i) => {
+      let nx, ny, nz
+      if (N === 1) { nx = 0; ny = 0; nz = 0 }
+      else {
+        const y = 1 - 2 * ((i + 0.5) / N)
+        const r = Math.sqrt(Math.max(0, 1 - y * y))
+        const theta = golden * i
+        nx = Math.cos(theta) * r
+        ny = y
+        nz = Math.sin(theta) * r
+      }
+      const target = new THREE.Vector3(
+        center.x + nx * rx,
+        center.y + ny * ry,
+        center.z + nz * rz,
+      )
+      s.userData.currentBase.copy(target)
+      const off = target.clone().sub(orbitCenter)
+      s.userData.orbitRadius = Math.hypot(off.x, off.z)
+      s.userData.orbitAngle = Math.atan2(off.z, off.x)
+      s.userData.orbitYOffset = target.y
     })
   }
 
@@ -1845,9 +1904,12 @@ onMounted(() => {
     gsap.to(camera.position, { x: overviewCameraBase.x, y: overviewCameraBase.y, z: overviewCameraBase.z, duration: 1.0, ease: 'power3.out' })
     gsap.to(lookTarget, { x: overviewLookBase.x, y: overviewLookBase.y, z: overviewLookBase.z, duration: 1.0, ease: 'power3.out' })
 
+    // 关键：进入大类视图前，先把 currentBase 重排到中心小椭球（方案 B）
+    applyLayoutForFilter(groupKey || null)
+
     const targets = sectors.filter((s) => !groupKey || s.userData.data.groupKey === groupKey)
     targets.forEach((sector, index) => {
-      const base = sector.userData.basePosition
+      const base = sector.userData.currentBase
       const state = sector.userData.state
       gsap.killTweensOf(sector.position)
       gsap.killTweensOf(sector.scale)
@@ -1884,7 +1946,9 @@ onMounted(() => {
     })
   }
 
-  // 全产业展示：把当前 filter 之外、仍处于隐藏状态的球，从场景边缘扫入
+  // 全产业展示：
+  //  · 当前 filter 内已经可见的球：从"中心小椭球位置"滑回原始 basePosition（扩散）
+  //  · filter 之外仍隐藏的球：从场景边缘扫入到 basePosition
   function showAllRemaining() {
     if (!activeFilter.value) return   // 已经是全产业态，不需要再飞
     const prevFilter = activeFilter.value
@@ -1892,28 +1956,37 @@ onMounted(() => {
     statusTitle.value = '总览'
     statusBody.value = '已展示全部 50 条产业链。点击任意产业球可展开对应产业链。'
 
-    const targets = sectors.filter((s) => s.userData.data.groupKey !== prevFilter && !s.visible)
-    targets.forEach((sector, index) => {
+    // 把所有球的 currentBase 复位到原始 basePosition，并刷新 orbit 参数
+    applyLayoutForFilter(null)
+
+    sectors.forEach((sector, index) => {
       const base = sector.userData.basePosition
       const state = sector.userData.state
       gsap.killTweensOf(sector.position)
       gsap.killTweensOf(sector.scale)
       gsap.killTweensOf(state)
-      sector.visible = true
       sector.userData.activated = false
-      const dir = base.clone().normalize()
-      sector.position.set(dir.x * 24 + base.x * 0.1, base.y + dir.y * 4, dir.z * 24 + base.z * 0.1)
-      sector.scale.setScalar(0.001)
-      state.opacity = 0
-      state.glow = 0
-      sector.userData.shell.material.opacity = 0
-      sector.userData.shell.material.emissiveIntensity = 0
-      setLabelOpacity(sector.userData.label, 0)
 
-      const delay = index * 0.025
-      const dur = 1.1
-      gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: dur, delay, ease: 'power3.out' })
-      gsap.to(sector.scale, { x: 1.18, y: 1.18, z: 1.18, duration: dur, delay, ease: 'power3.out' })
+      const wasVisible = sector.visible
+      if (!wasVisible) {
+        // 隐藏的球：从场景边缘 base 方向远端扫入
+        sector.visible = true
+        const dir = base.clone().normalize()
+        sector.position.set(dir.x * 24 + base.x * 0.1, base.y + dir.y * 4, dir.z * 24 + base.z * 0.1)
+        sector.scale.setScalar(0.001)
+        state.opacity = 0
+        state.glow = 0
+        sector.userData.shell.material.opacity = 0
+        sector.userData.shell.material.emissiveIntensity = 0
+        setLabelOpacity(sector.userData.label, 0)
+      }
+      // 可见球（原 filter 内）当前位于中心小椭球；直接 tween 回原始 basePosition 即可
+
+      const delay = index * 0.018
+      const dur = wasVisible ? 1.25 : 1.1
+      const ease = wasVisible ? 'power3.inOut' : 'power3.out'
+      gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: dur, delay, ease })
+      gsap.to(sector.scale, { x: 1.18, y: 1.18, z: 1.18, duration: dur, delay, ease })
       gsap.to(state, {
         opacity: 0.82, glow: 0.38, duration: dur, delay, ease: 'power2.out',
         onUpdate: () => {
@@ -1933,6 +2006,8 @@ onMounted(() => {
     sceneState.busy = false
     sceneState.focusedSector = null
     activeSectorKey.value = null
+    // 回到 landing：没有锁定节点，右侧抽屉一并关掉
+    if (orgDrawer.visible) closeOrgDrawer()
 
     const targets = sectors.filter((s) => s.visible)
     if (!targets.length) {
@@ -2341,7 +2416,8 @@ onMounted(() => {
       if (sceneState.focusedSector === sector) return
       // 未激活（landing 阶段 / 飞入动画中）的球：不参与 orbit 漂浮，避免 gsap 与 lerp 打架
       if (!sector.visible || !sector.userData.activated) return
-      const base = sector.userData.basePosition
+      // 用 currentBase（filter 模式重排后的中心椭球坐标 / 全产业模式下的原始坐标）
+      const base = sector.userData.currentBase
       const orbitRadius = sector.userData.orbitRadius
       const orbitAngle = sector.userData.orbitAngle
       const orbitDrift = elapsed * 0.05 + index * 0.08
@@ -3001,17 +3077,6 @@ onBeforeUnmount(() => cleanup())
 }
 .blueprint-landing-card.is-all {
   --accent: #cfd8e2;
-  grid-column: span 4;
-  min-height: 96px;
-  flex-direction: row;
-  align-items: center;
-  gap: 18px;
-  padding: 18px 24px;
-}
-.blueprint-landing-card.is-all .blueprint-landing-card-desc {
-  flex: 1 1 auto;
-  margin-left: auto;
-  text-align: right;
 }
 .blueprint-landing-card-icon {
   display: inline-flex;
@@ -3061,9 +3126,6 @@ onBeforeUnmount(() => cleanup())
   .blueprint-landing-grid {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
     max-width: 520px;
-  }
-  .blueprint-landing-card.is-all {
-    grid-column: span 2;
   }
 }
 .blueprint-back-btn:hover {
@@ -3247,7 +3309,8 @@ onBeforeUnmount(() => cleanup())
   display: flex;
   gap: 12px;
   align-items: center;
-  z-index: 5;
+  /* landing 蒙层 z-index 是 8，footer 要在它上面，"返回首页"才能点 */
+  z-index: 12;
   pointer-events: none;
 }
 
