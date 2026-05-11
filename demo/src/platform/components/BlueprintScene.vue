@@ -11,8 +11,40 @@
       <em v-if="labelTooltip.meta">{{ labelTooltip.meta }}</em>
     </div>
 
-    <!-- 左上：产业链快速切换面板 -->
-    <nav class="blueprint-sector-menu" aria-label="产业链切换">
+    <!-- 入口 Landing：8 张玻璃卡片（7 大类 + 1 全产业），点击后飞入场景 -->
+    <Transition name="landing-fade">
+      <div v-if="viewState === 'landing'" class="blueprint-landing">
+        <div class="blueprint-landing-head">
+          <p class="blueprint-landing-eyebrow">产业链全景</p>
+          <h1 class="blueprint-landing-title">选择产业大类</h1>
+          <p class="blueprint-landing-subtitle">点击进入对应主产业球体视图，或选最后一张查看全部</p>
+        </div>
+        <div class="blueprint-landing-grid">
+          <button
+            v-for="card in categoryCards"
+            :key="card.key"
+            type="button"
+            :class="['blueprint-landing-card', `is-${card.kind}`]"
+            :style="{ '--accent': card.colorHex }"
+            data-landing-card
+            :data-key="card.key"
+            @click="onPickCategory(card)"
+          >
+            <div class="blueprint-landing-card-icon">{{ card.kind === 'all' ? '⬡' : '◆' }}</div>
+            <h2 class="blueprint-landing-card-name">{{ card.name }}</h2>
+            <div class="blueprint-landing-card-count">{{ card.count }} 条产业链</div>
+            <p class="blueprint-landing-card-desc">{{ card.desc }}</p>
+          </button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- 左上：产业链快速切换面板（仅 scene 态显示） -->
+    <nav
+      v-if="viewState === 'scene'"
+      class="blueprint-sector-menu"
+      aria-label="产业链切换"
+    >
       <!-- 静态头部：标题 + 快速跳转 chip（不参与下方滚动） -->
       <div class="blueprint-sector-menu-header">
         <div class="blueprint-sector-menu-title">产业切换</div>
@@ -28,11 +60,12 @@
           >{{ cat.shortName }}</button>
         </div>
       </div>
-      <!-- 可滚动的菜单列表 -->
+      <!-- 可滚动的菜单列表（按 activeFilter 过滤） -->
       <div class="blueprint-sector-menu-list">
         <button
           v-for="entry in sectorMenu"
           :key="entry.dataKey"
+          v-show="!activeFilter || entry.groupKey === activeFilter"
           type="button"
           :data-group-key="entry.groupKey"
           :class="['blueprint-sector-menu-item', { 'is-active': activeSectorKey === entry.dataKey }]"
@@ -45,16 +78,25 @@
       </div>
     </nav>
 
-    <div class="blueprint-hud">
+    <div v-if="viewState === 'scene'" class="blueprint-hud">
       <button
-        v-if="activeSectorKey"
+        v-if="activeFilter && !activeSectorKey"
+        type="button"
+        class="blueprint-toall-btn"
+        title="把所有产业球都飞进来"
+        @click="onShowAll"
+      >
+        <span class="blueprint-toall-icon">⬡</span>
+        <span>全产业展示</span>
+      </button>
+      <button
         type="button"
         class="blueprint-back-btn"
         title="返回上一级（Esc）"
         @click="onGoBack"
       >
         <span class="blueprint-back-arrow">‹</span>
-        <span>返回上一级</span>
+        <span>{{ activeSectorKey ? '返回上一级' : '返回选择' }}</span>
       </button>
       <div class="blueprint-status">
         <div class="blueprint-status-kicker">场景状态</div>
@@ -351,6 +393,63 @@ function onSectorMenuClick(entry) {
     selectSectorByKeyFn(entry.dataKey)
   }
 }
+
+// ── Landing 选择页面 ────────────────────────────────────────────────
+// viewState: 'landing' = 显示分类卡片选择页；'scene' = 显示 3D 球体场景
+// activeFilter: null = 显示全部 50 球；非 null = 只显示该 groupKey 的球
+const viewState = ref('landing')
+const activeFilter = ref(null)
+
+// 给每个大类添加简短描述（用于 landing 卡片）
+const CATEGORY_DESCS = {
+  materials:  '专用化学品 · 电子/锂电/医药材料',
+  aerospace:  '航空航天与国防装备',
+  electrical: '电气零部件 · 锂离子/固态/钠离子电池',
+  machinery:  '工程机械 · 工业机器人 · 增材制造',
+  auto:       '智能车载 · 汽车零部件 · 新能源整车',
+  health:     '医疗保健设备 · 生物制药',
+  tech:       '通信设备 · 电子元件 · 半导体',
+}
+
+// landing 8 张卡（7 个大类 + 1 个全产业）
+const categoryCards = (() => {
+  const seen = new Set()
+  const list = []
+  for (const s of sectorList) {
+    if (seen.has(s.groupKey)) continue
+    seen.add(s.groupKey)
+    list.push({
+      kind: 'category',
+      key: s.groupKey,
+      name: s.groupName,
+      colorHex: s.colorHex,
+      count: sectorList.filter(x => x.groupKey === s.groupKey).length,
+      desc: CATEGORY_DESCS[s.groupKey] || '',
+    })
+  }
+  list.push({
+    kind: 'all',
+    key: '__all__',
+    name: '全产业展示',
+    colorHex: '#cfd8e2',
+    count: sectorList.length,
+    desc: '一次性查看全部 50 条产业链',
+  })
+  return list
+})()
+
+let enterCategoryFn = () => {}
+function onPickCategory(card) {
+  if (card.kind === 'all') {
+    enterCategoryFn(null)
+  } else {
+    enterCategoryFn(card.key)
+  }
+}
+let backToLandingFn = () => {}
+function onBackToLanding() { backToLandingFn() }
+let showAllFn = () => {}
+function onShowAll() { showAllFn() }
 
 let cleanup = () => {}
 
@@ -662,7 +761,17 @@ onMounted(() => {
     group.userData.shell = shell
     group.userData.label = label
     group.userData.hit = hit
+    group.userData.activated = false   // landing 阶段全部不参与 orbit/绘制；进入场景后逐个置 true
     bindLabelClick(label, group)
+
+    // 初始隐藏：landing 页面 8 张玻璃卡片优先呈现，等用户选完大类才飞入
+    group.visible = false
+    shell.material.opacity = 0
+    shell.material.emissiveIntensity = 0
+    group.userData.state.opacity = 0
+    group.userData.state.glow = 0
+    setLabelOpacity(label, 0)
+    group.scale.setScalar(0.001)
 
     sectorHitAreas.push(hit)
     driftGroup.add(group)
@@ -674,6 +783,7 @@ onMounted(() => {
   const SECTOR_DEFS = sectorList.map((s) => ({
     name: s.name,
     dataKey: s.dataKey,
+    groupKey: s.groupKey,
     color: new THREE.Color(s.colorHex),
     position: new THREE.Vector3(s.position.x, s.position.y, s.position.z),
   }))
@@ -694,6 +804,7 @@ onMounted(() => {
     })
     return {
       dataKey: def.dataKey,
+      groupKey: def.groupKey,
       name: def.name,
       color: def.color,
       position: def.position,
@@ -1682,24 +1793,196 @@ onMounted(() => {
     gsap.to(lookTarget, { x: overviewLookBase.x, y: overviewLookBase.y, z: overviewLookBase.z, duration: 1.15, ease: 'power3.out' })
 
     sectors.forEach((sector) => {
+      // 按 activeFilter 过滤：不属于当前大类的球继续保持隐藏，不要"返回总览"就一齐冒出来
+      const matches = !activeFilter.value || sector.userData.data.groupKey === activeFilter.value
+      if (!matches) {
+        gsap.killTweensOf(sector.position)
+        gsap.killTweensOf(sector.scale)
+        gsap.killTweensOf(sector.userData.state)
+        sector.visible = false
+        sector.userData.activated = false
+        sector.userData.state.opacity = 0
+        sector.userData.state.glow = 0
+        sector.userData.shell.material.opacity = 0
+        sector.userData.shell.material.emissiveIntensity = 0
+        setLabelOpacity(sector.userData.label, 0)
+        sector.scale.setScalar(0.001)
+        return
+      }
       sector.visible = true   // 之前可能因聚焦被 visible=false 隐藏，回到总览先打开
       const base = sector.userData.basePosition
       const state = sector.userData.state
       gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: 1.05, ease: 'power3.out' })
       gsap.to(sector.scale, { x: 1.18, y: 1.18, z: 1.18, duration: 1.05, ease: 'power3.out' })
-      gsap.to(state, { opacity: 0.82, glow: 0.38, duration: 1.05, ease: 'power3.out', onUpdate: () => {
-        sector.userData.shell.material.opacity = state.opacity
-        sector.userData.shell.material.emissiveIntensity = state.glow
-        setLabelOpacity(sector.userData.label, 0.96)
-      }})
+      gsap.to(state, { opacity: 0.82, glow: 0.38, duration: 1.05, ease: 'power3.out',
+        onUpdate: () => {
+          sector.userData.shell.material.opacity = state.opacity
+          sector.userData.shell.material.emissiveIntensity = state.glow
+          setLabelOpacity(sector.userData.label, 0.96)
+        },
+        onComplete: () => { sector.userData.activated = true }
+      })
+    })
+  }
+
+  // 卡片爆裂式飞入：选中大类后从画面中心炸出对应的球，依次到达基础位置
+  function flyInSectors(groupKey, { fromOrigin = true } = {}) {
+    hideLabelTooltip()
+    if (currentTimeline) currentTimeline.kill()
+    sceneState.busy = false
+    sceneState.focusedSector = null
+    activeSectorKey.value = null
+    statusTitle.value = groupKey
+      ? (sectorList.find(s => s.groupKey === groupKey)?.groupName || '产业大类')
+      : '总览'
+    statusBody.value = groupKey
+      ? '已进入该大类，点击任意球体可展开产业链。点击"全产业展示"可把其它大类的球一起飞入。'
+      : '点击任意漂浮产业扇区。镜头会推近，核心脉冲触发，主链节点依次生长，分支节点随后展开。'
+
+    // 相机回到总览
+    gsap.killTweensOf(camera.position)
+    gsap.killTweensOf(lookTarget)
+    gsap.to(camera.position, { x: overviewCameraBase.x, y: overviewCameraBase.y, z: overviewCameraBase.z, duration: 1.0, ease: 'power3.out' })
+    gsap.to(lookTarget, { x: overviewLookBase.x, y: overviewLookBase.y, z: overviewLookBase.z, duration: 1.0, ease: 'power3.out' })
+
+    const targets = sectors.filter((s) => !groupKey || s.userData.data.groupKey === groupKey)
+    targets.forEach((sector, index) => {
+      const base = sector.userData.basePosition
+      const state = sector.userData.state
+      gsap.killTweensOf(sector.position)
+      gsap.killTweensOf(sector.scale)
+      gsap.killTweensOf(state)
+      sector.visible = true
+      sector.userData.activated = false
+      // 起点：fromOrigin=true → 从屏幕中心炸出；否则从场景边缘（base 方向远端）扫入
+      if (fromOrigin) {
+        sector.position.set(0, 0.2, 6.4)
+      } else {
+        const dir = base.clone().normalize()
+        sector.position.set(dir.x * 22 + base.x * 0.2, base.y + dir.y * 6, dir.z * 22 + base.z * 0.2)
+      }
+      sector.scale.setScalar(0.001)
+      state.opacity = 0
+      state.glow = 0
+      sector.userData.shell.material.opacity = 0
+      sector.userData.shell.material.emissiveIntensity = 0
+      setLabelOpacity(sector.userData.label, 0)
+
+      const delay = index * 0.05
+      const dur = 1.05
+      gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: dur, delay, ease: 'back.out(1.2)' })
+      gsap.to(sector.scale, { x: 1.18, y: 1.18, z: 1.18, duration: dur, delay, ease: 'power3.out' })
+      gsap.to(state, {
+        opacity: 0.82, glow: 0.38, duration: dur, delay, ease: 'power2.out',
+        onUpdate: () => {
+          sector.userData.shell.material.opacity = state.opacity
+          sector.userData.shell.material.emissiveIntensity = state.glow
+          setLabelOpacity(sector.userData.label, Math.min(0.96, state.opacity * 1.2))
+        },
+        onComplete: () => { sector.userData.activated = true }
+      })
+    })
+  }
+
+  // 全产业展示：把当前 filter 之外、仍处于隐藏状态的球，从场景边缘扫入
+  function showAllRemaining() {
+    if (!activeFilter.value) return   // 已经是全产业态，不需要再飞
+    const prevFilter = activeFilter.value
+    activeFilter.value = null
+    statusTitle.value = '总览'
+    statusBody.value = '已展示全部 50 条产业链。点击任意产业球可展开对应产业链。'
+
+    const targets = sectors.filter((s) => s.userData.data.groupKey !== prevFilter && !s.visible)
+    targets.forEach((sector, index) => {
+      const base = sector.userData.basePosition
+      const state = sector.userData.state
+      gsap.killTweensOf(sector.position)
+      gsap.killTweensOf(sector.scale)
+      gsap.killTweensOf(state)
+      sector.visible = true
+      sector.userData.activated = false
+      const dir = base.clone().normalize()
+      sector.position.set(dir.x * 24 + base.x * 0.1, base.y + dir.y * 4, dir.z * 24 + base.z * 0.1)
+      sector.scale.setScalar(0.001)
+      state.opacity = 0
+      state.glow = 0
+      sector.userData.shell.material.opacity = 0
+      sector.userData.shell.material.emissiveIntensity = 0
+      setLabelOpacity(sector.userData.label, 0)
+
+      const delay = index * 0.025
+      const dur = 1.1
+      gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: dur, delay, ease: 'power3.out' })
+      gsap.to(sector.scale, { x: 1.18, y: 1.18, z: 1.18, duration: dur, delay, ease: 'power3.out' })
+      gsap.to(state, {
+        opacity: 0.82, glow: 0.38, duration: dur, delay, ease: 'power2.out',
+        onUpdate: () => {
+          sector.userData.shell.material.opacity = state.opacity
+          sector.userData.shell.material.emissiveIntensity = state.glow
+          setLabelOpacity(sector.userData.label, Math.min(0.96, state.opacity * 1.2))
+        },
+        onComplete: () => { sector.userData.activated = true }
+      })
+    })
+  }
+
+  // 返回 landing：先把当前可见的球缩成黑点，再切回选择页
+  function flyOutToLanding() {
+    hideLabelTooltip()
+    if (currentTimeline) currentTimeline.kill()
+    sceneState.busy = false
+    sceneState.focusedSector = null
+    activeSectorKey.value = null
+
+    const targets = sectors.filter((s) => s.visible)
+    if (!targets.length) {
+      viewState.value = 'landing'
+      activeFilter.value = null
+      return
+    }
+    targets.forEach((sector, index) => {
+      const state = sector.userData.state
+      gsap.killTweensOf(sector.position)
+      gsap.killTweensOf(sector.scale)
+      gsap.killTweensOf(state)
+      sector.userData.activated = false
+      const delay = index * 0.012
+      const dur = 0.55
+      gsap.to(sector.scale, { x: 0.001, y: 0.001, z: 0.001, duration: dur, delay, ease: 'power2.in' })
+      gsap.to(state, {
+        opacity: 0, glow: 0, duration: dur, delay, ease: 'power2.in',
+        onUpdate: () => {
+          sector.userData.shell.material.opacity = state.opacity
+          sector.userData.shell.material.emissiveIntensity = state.glow
+          setLabelOpacity(sector.userData.label, state.opacity)
+        },
+        onComplete: () => { sector.visible = false }
+      })
+    })
+    gsap.delayedCall(0.55 + targets.length * 0.012, () => {
+      viewState.value = 'landing'
+      activeFilter.value = null
     })
   }
 
   resetSceneFn = resetScene
-  // "返回上一级"：聚焦了 L1 → 退回到产业链总览；只聚焦产业 → 退回 50 球总览
+  // landing → scene：选中某个大类（或全产业）后调用
+  enterCategoryFn = (groupKey) => {
+    viewState.value = 'scene'
+    activeFilter.value = groupKey || null
+    flyInSectors(groupKey, { fromOrigin: true })
+  }
+  showAllFn = () => { showAllRemaining() }
+  backToLandingFn = () => { flyOutToLanding() }
+
+  // "返回上一级"语义：
+  // 1) 展开了 L2 子树 → 关掉子树
+  // 2) 聚焦了某个产业 → 退到该 filter 下的总览
+  // 3) 只是站在 filter/全产业总览 → 退回 landing 选择页
   goBackFn = () => {
     if (focusedBranchNode) closeBranchDetail()
     else if (sceneState.focusedSector) resetScene()
+    else if (viewState.value === 'scene') flyOutToLanding()
   }
 
   // 产业切换菜单点击：自动处理"已聚焦其他产业 / 动画进行中"等情况
@@ -2025,16 +2308,16 @@ onMounted(() => {
 
   function onKeydown(event) {
     if (event.key === 'Escape') {
-      if (focusedBranchNode) {
-        closeBranchDetail()
-      } else {
-        resetScene()
-      }
+      if (viewState.value === 'landing') return
+      if (focusedBranchNode) closeBranchDetail()
+      else if (sceneState.focusedSector) resetScene()
+      else flyOutToLanding()
     }
   }
 
   function onDblClick() {
-    resetScene()
+    if (viewState.value !== 'scene') return
+    if (sceneState.focusedSector) resetScene()
   }
 
   window.addEventListener('resize', onResize)
@@ -2046,13 +2329,18 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('dblclick', onDblClick)
 
-  resetScene()
+  // 不在挂载时调 resetScene —— 此时 viewState='landing'，50 球初始全部隐藏，
+  // 让前端先呈现 8 张玻璃卡片。用户点选大类后 enterCategoryFn 才把球飞入场景。
+  statusTitle.value = '总览'
+  statusBody.value = '请选择产业大类'
 
   function render() {
     const elapsed = clock.getElapsedTime()
     const overviewMode = !sceneState.focusedSector
     sectors.forEach((sector, index) => {
       if (sceneState.focusedSector === sector) return
+      // 未激活（landing 阶段 / 飞入动画中）的球：不参与 orbit 漂浮，避免 gsap 与 lerp 打架
+      if (!sector.visible || !sector.userData.activated) return
       const base = sector.userData.basePosition
       const orbitRadius = sector.userData.orbitRadius
       const orbitAngle = sector.userData.orbitAngle
@@ -2066,14 +2354,17 @@ onMounted(() => {
       sector.position.x += (targetX - sector.position.x) * 0.018
       sector.position.y += (targetY - sector.position.y) * 0.04
       sector.position.z += (targetZ - sector.position.z) * 0.018
-      sector.userData.shell.position.y = Math.sin(elapsed * 1.15 + index) * 0.14
-      sector.userData.label.position.y = 2.52
+      // shell 上下漂浮 ±0.14；label 在 shell 上方固定 1.32 处，跟着一起浮，不再钉死
+      const shellBobY = Math.sin(elapsed * 1.15 + index) * 0.14
+      sector.userData.shell.position.y = shellBobY
+      sector.userData.label.position.y = 1.32 + shellBobY
     })
 
     if (sceneState.focusedSector) {
       const focus = sceneState.focusedSector
-      focus.userData.shell.position.y = Math.sin(elapsed * 2.2) * 0.08
-      focus.userData.label.position.y = 2.22
+      const focusBobY = Math.sin(elapsed * 2.2) * 0.08
+      focus.userData.shell.position.y = focusBobY
+      focus.userData.label.position.y = 1.32 + focusBobY
     }
 
     const parallaxX = hoverTarget.x * 0.36
@@ -2577,6 +2868,203 @@ onBeforeUnmount(() => cleanup())
   pointer-events: auto;
   backdrop-filter: blur(10px);
   transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+}
+
+.blueprint-toall-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  margin-top: 6px;
+  border: 1px solid rgba(207, 216, 226, 0.45);
+  border-radius: 999px;
+  background: linear-gradient(120deg, rgba(40, 60, 110, 0.85), rgba(20, 32, 64, 0.85));
+  color: #f4f8ff;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 16px rgba(120, 163, 255, 0.32);
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
+}
+.blueprint-toall-btn:hover {
+  border-color: rgba(207, 216, 226, 0.8);
+  box-shadow: 0 0 22px rgba(150, 190, 255, 0.55);
+  transform: translateY(-1px);
+}
+.blueprint-toall-btn:active {
+  transform: translateY(1px);
+}
+.blueprint-toall-icon {
+  font-size: 14px;
+  line-height: 1;
+  color: rgba(180, 220, 255, 0.95);
+}
+
+/* ── Landing 选择页：8 张玻璃卡片矩阵 ─────────────────────── */
+.blueprint-landing {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 32px;
+  background: radial-gradient(ellipse at 50% 38%, rgba(20, 36, 72, 0.42) 0%, rgba(4, 8, 16, 0.78) 70%);
+  backdrop-filter: blur(2px);
+  pointer-events: auto;
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+}
+.blueprint-landing-head {
+  text-align: center;
+  margin-bottom: 36px;
+  color: rgba(220, 240, 255, 0.92);
+}
+.blueprint-landing-eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.5em;
+  color: rgba(134, 228, 255, 0.78);
+  text-transform: uppercase;
+}
+.blueprint-landing-title {
+  margin: 0 0 10px;
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  color: #f4f9ff;
+  text-shadow: 0 0 18px rgba(120, 180, 255, 0.32);
+}
+.blueprint-landing-subtitle {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: rgba(180, 210, 240, 0.7);
+}
+.blueprint-landing-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 220px));
+  gap: 18px;
+  width: 100%;
+  max-width: 960px;
+}
+.blueprint-landing-card {
+  --accent: #86e4ff;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 168px;
+  padding: 20px 18px 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, rgba(133, 205, 255, 0.18));
+  border-radius: 18px;
+  background: linear-gradient(155deg,
+    color-mix(in srgb, var(--accent) 14%, rgba(10, 18, 36, 0.78)) 0%,
+    rgba(8, 14, 28, 0.86) 55%,
+    color-mix(in srgb, var(--accent) 8%, rgba(8, 14, 28, 0.92)) 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 14px 32px rgba(0, 0, 0, 0.45),
+    0 0 22px color-mix(in srgb, var(--accent) 16%, transparent);
+  color: rgba(232, 244, 255, 0.95);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+.blueprint-landing-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 88% 8%,
+    color-mix(in srgb, var(--accent) 36%, transparent) 0%,
+    transparent 52%);
+  opacity: 0.6;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+.blueprint-landing-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--accent) 70%, rgba(255, 255, 255, 0.15));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 18px 38px rgba(0, 0, 0, 0.52),
+    0 0 34px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.blueprint-landing-card:hover::before {
+  opacity: 0.9;
+}
+.blueprint-landing-card.is-all {
+  --accent: #cfd8e2;
+  grid-column: span 4;
+  min-height: 96px;
+  flex-direction: row;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 24px;
+}
+.blueprint-landing-card.is-all .blueprint-landing-card-desc {
+  flex: 1 1 auto;
+  margin-left: auto;
+  text-align: right;
+}
+.blueprint-landing-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 22%, rgba(8, 14, 28, 0.6));
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 65%, transparent);
+}
+.blueprint-landing-card-name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: #ffffff;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.blueprint-landing-card-count {
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  color: color-mix(in srgb, var(--accent) 75%, rgba(220, 240, 255, 0.7));
+}
+.blueprint-landing-card-desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  letter-spacing: 0.06em;
+  color: rgba(200, 220, 240, 0.78);
+}
+
+/* landing -> scene 淡出过渡 */
+.landing-fade-enter-active,
+.landing-fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.landing-fade-enter-from,
+.landing-fade-leave-to {
+  opacity: 0;
+}
+@media (max-width: 880px) {
+  .blueprint-landing-grid {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+    max-width: 520px;
+  }
+  .blueprint-landing-card.is-all {
+    grid-column: span 2;
+  }
 }
 .blueprint-back-btn:hover {
   background: rgba(20, 38, 70, 0.85);
