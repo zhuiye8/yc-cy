@@ -11,95 +11,78 @@
       <em v-if="labelTooltip.meta">{{ labelTooltip.meta }}</em>
     </div>
 
-    <!-- 入口 Landing：8 张玻璃卡片（7 大类 + 1 全产业），点击后飞入场景 -->
-    <Transition name="landing-fade">
-      <div v-if="viewState === 'landing'" class="blueprint-landing">
-        <div class="blueprint-landing-head">
-          <p class="blueprint-landing-eyebrow">产业链全景</p>
-          <h1 class="blueprint-landing-title">选择产业大类</h1>
-          <p class="blueprint-landing-subtitle">点击进入对应主产业球体视图，或选最后一张查看全部</p>
-        </div>
-        <div class="blueprint-landing-grid">
-          <button
-            v-for="card in categoryCards"
-            :key="card.key"
-            type="button"
-            :class="['blueprint-landing-card', `is-${card.kind}`]"
-            :style="{ '--accent': card.colorHex }"
-            data-landing-card
-            :data-key="card.key"
-            @click="onPickCategory(card)"
-          >
-            <div class="blueprint-landing-card-icon">{{ card.kind === 'all' ? '⬡' : '◆' }}</div>
-            <h2 class="blueprint-landing-card-name">{{ card.name }}</h2>
-            <div class="blueprint-landing-card-count">{{ card.count }} 条产业链</div>
-            <p class="blueprint-landing-card-desc">{{ card.desc }}</p>
-          </button>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- 左上：产业链快速切换面板（仅 scene 态显示） -->
-    <nav
-      v-if="viewState === 'scene'"
-      class="blueprint-sector-menu"
-      aria-label="产业链切换"
-    >
-      <!-- 静态头部：标题 + 快速跳转 chip（不参与下方滚动） -->
-      <div class="blueprint-sector-menu-header">
-        <div class="blueprint-sector-menu-title">产业切换</div>
-        <div class="blueprint-sector-menu-jumps" aria-label="按大类跳转">
-          <button
-            v-for="cat in categoryJumps"
-            :key="cat.key"
-            type="button"
-            class="blueprint-jump-chip"
-            :style="{ '--accent': cat.colorHex }"
-            :title="`${cat.name} · ${cat.count} 条`"
-            @click="onJumpToCategory(cat.key)"
-          >{{ cat.shortName }}</button>
-        </div>
-      </div>
-      <!-- 可滚动的菜单列表（按 activeFilter 过滤） -->
-      <div class="blueprint-sector-menu-list">
-        <button
-          v-for="entry in sectorMenu"
-          :key="entry.dataKey"
-          v-show="!activeFilter || entry.groupKey === activeFilter"
-          type="button"
-          :data-group-key="entry.groupKey"
-          :class="['blueprint-sector-menu-item', { 'is-active': activeSectorKey === entry.dataKey }]"
-          :style="{ '--accent': entry.colorHex }"
-          @click="onSectorMenuClick(entry)"
+    <!-- 顶部搜索框：直接搜产业链名 → 跳到 3D 场景并聚焦该球 -->
+    <div class="blueprint-search">
+      <div class="blueprint-search-box">
+        <span class="blueprint-search-icon">⌕</span>
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="blueprint-search-input"
+          placeholder="搜索产业链 (如 AI算力芯片 / 锂电隔膜)"
+          @focus="onSearchFocus"
+          @blur="onSearchBlur"
         >
-          <span class="blueprint-sector-menu-dot"></span>
-          <span class="blueprint-sector-menu-name">{{ entry.name }}</span>
+        <button v-if="searchQuery" type="button" class="blueprint-search-clear" @click="searchQuery = ''">×</button>
+      </div>
+      <div v-if="searchFocused && searchResults.length" class="blueprint-search-dropdown">
+        <button
+          v-for="r in searchResults"
+          :key="r.dataKey"
+          type="button"
+          class="blueprint-search-item"
+          @mousedown.prevent
+          @click="onSearchPick(r)"
+        >
+          <span class="blueprint-search-item-name">{{ r.name }}</span>
+          <span class="blueprint-search-item-meta">{{ r.gicsName }} · {{ r.gicsCode }}</span>
         </button>
       </div>
-    </nav>
+      <div v-else-if="searchFocused && searchQuery && !searchResults.length" class="blueprint-search-dropdown is-empty">
+        无匹配产业链
+      </div>
+    </div>
 
-    <div v-if="viewState === 'scene'" class="blueprint-hud">
+    <!-- 左侧板块快捷栏：点击直接进入该板块的"行业组"层 -->
+    <aside class="blueprint-sector-rail" aria-label="板块快捷">
+      <div class="blueprint-sector-rail-title">板块</div>
       <button
-        v-if="activeFilter && !activeSectorKey"
+        v-for="s in SECTOR_RAIL"
+        :key="s.code"
         type="button"
-        class="blueprint-toall-btn"
-        title="把所有产业球都飞进来"
-        @click="onShowAll"
+        :class="['blueprint-sector-rail-chip', { 'is-active': gicsSel.sector?.code === s.code }]"
+        :style="{ '--rail-c': getSectorRailColor(s.code) }"
+        :title="s.code + ' ' + s.name"
+        @click="onSectorRailClick(s)"
       >
-        <span class="blueprint-toall-icon">⬡</span>
-        <span>全产业展示</span>
+        <span class="blueprint-sector-rail-dot"></span>
+        <span class="blueprint-sector-rail-name">{{ s.name }}</span>
       </button>
+    </aside>
+
+    <div class="blueprint-hud">
       <button
+        v-if="viewState !== 'gics-sector'"
         type="button"
         class="blueprint-back-btn"
         title="返回上一级（Esc）"
         @click="onGoBack"
       >
         <span class="blueprint-back-arrow">‹</span>
-        <span>{{ activeSectorKey ? '返回上一级' : '返回选择' }}</span>
+        <span>返回上一级</span>
+      </button>
+      <button
+        v-if="viewState !== 'scene'"
+        type="button"
+        :class="['blueprint-only-chains-btn', { 'is-active': showOnlyWithChains }]"
+        :title="showOnlyWithChains ? '当前只显示带产业链数据的球' : '点击隐藏暂无产业链的球'"
+        @click="onToggleOnlyChains"
+      >
+        <span class="blueprint-only-chains-dot"></span>
+        <span>{{ showOnlyWithChains ? '显示全部' : '只看有产业链' }}</span>
       </button>
       <div class="blueprint-status">
-        <div class="blueprint-status-kicker">场景状态</div>
+        <div class="blueprint-status-kicker">{{ levelLabel }}</div>
         <div class="blueprint-status-title">{{ statusTitle }}</div>
         <div class="blueprint-status-body">{{ statusBody }}</div>
       </div>
@@ -180,7 +163,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import * as THREE from 'three'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import gsap from 'gsap'
@@ -194,6 +177,7 @@ import {
   ShockWaveEffect
 } from 'postprocessing'
 import { industryChainGraphData, sectorList } from '../data/industry-chain-graph.js'
+import { gicsHierarchy } from '../data/gics-hierarchy.js'
 import { chinaGeo, getProvinceChildren } from '../data/map-scene-data.js'
 import { searchChainOrgs } from '../../api/chainOrg.js'
 
@@ -297,14 +281,6 @@ const onReset = () => resetSceneFn()
 let goBackFn = () => {}
 const onGoBack = () => goBackFn()
 
-// 主产业菜单：50 条产业链各一项，顺序按 GICS 大类聚合（dataKey/colorHex/position 全部由 build 脚本生成）
-const sectorMenu = sectorList.map((s) => ({
-  name: s.name,
-  dataKey: s.dataKey,
-  colorHex: s.colorHex,
-  groupKey: s.groupKey,
-}))
-
 const orgProvinceOptions = chinaGeo.features
   .map((feature) => ({
     code: String(feature.properties?.adcode || ''),
@@ -357,99 +333,117 @@ function buildQueryableChainNames() {
 
 const queryableChainNames = buildQueryableChainNames()
 
-// 顶部快速跳转 chip：按 groupKey 去重，保持原始顺序
-const categoryJumps = (() => {
-  const seen = new Set()
-  const jumps = []
-  for (const s of sectorList) {
-    if (seen.has(s.groupKey)) continue
-    seen.add(s.groupKey)
-    jumps.push({
-      key: s.groupKey,
-      name: s.groupName,
-      shortName: s.groupShort,
-      colorHex: s.colorHex,
-      count: sectorList.filter(x => x.groupKey === s.groupKey).length,
-    })
-  }
-  return jumps
-})()
-
-function onJumpToCategory(groupKey) {
-  const el = document.querySelector(`.blueprint-sector-menu-item[data-group-key="${groupKey}"]`)
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
 const activeSectorKey = ref(null)
-let selectSectorByKeyFn = () => {}
-function onSectorMenuClick(entry) {
-  if (activeSectorKey.value === entry.dataKey) {
-    if (orgDrawer.visible && orgDrawer.chain !== entry.name) {
-      loadOrgDrawer(entry.name, '产业', 1)
-    } else {
-      resetSceneFn()
-    }
-  } else {
-    selectSectorByKeyFn(entry.dataKey)
-  }
-}
 
-// ── Landing 选择页面 ────────────────────────────────────────────────
-// viewState: 'landing' = 显示分类卡片选择页；'scene' = 显示 3D 球体场景
-// activeFilter: null = 显示全部 50 球；非 null = 只显示该 groupKey 的球
-const viewState = ref('landing')
+// ── 球体级联 + 3D 场景 ─────────────────────────────────────────────
+// viewState:
+//   'gics-sector' / 'gics-group' / 'gics-industry' / 'gics-sub' = 4 层 GICS 球体下钻
+//   'scene' = 产业链 3D 球体场景
+// activeFilter: 兼容字段（旧 7 大类筛选），新流程未使用
+// activeGicsCode: 8 位 GICS 子行业码（用于过滤 chain 球）
+const viewState = ref('gics-sector')
 const activeFilter = ref(null)
+const activeGicsCode = ref(null)
+const gicsSel = reactive({ sector: null, group: null, industry: null, sub: null })
 
-// 给每个大类添加简短描述（用于 landing 卡片）
-const CATEGORY_DESCS = {
-  materials:  '专用化学品 · 电子/锂电/医药材料',
-  aerospace:  '航空航天与国防装备',
-  electrical: '电气零部件 · 锂离子/固态/钠离子电池',
-  machinery:  '工程机械 · 工业机器人 · 增材制造',
-  auto:       '智能车载 · 汽车零部件 · 新能源整车',
-  health:     '医疗保健设备 · 生物制药',
-  tech:       '通信设备 · 电子元件 · 半导体',
+// 是否只展示带产业链数据的球（hierarchy 层级生效；scene 层级总是全显示）
+const showOnlyWithChains = ref(false)
+
+const LEVEL_LABELS = {
+  'gics-sector': '板块',
+  'gics-group': '行业组',
+  'gics-industry': '行业',
+  'gics-sub': '子行业',
+  'scene': '产业链',
+}
+const levelLabel = computed(() => LEVEL_LABELS[viewState.value] || '场景状态')
+
+// 按 viewState 决定哪一级球可见：
+//   gics-sector → 11 板块球
+//   gics-group → 已选板块下的行业组球
+//   gics-industry → 已选行业组下的行业球
+//   gics-sub → 已选行业下的子行业球
+//   scene → chain 球（按 activeGicsCode 过滤）
+function sectorMatchesActiveFilter(sector) {
+  const d = sector?.userData?.data
+  if (!d) return false
+  const v = viewState.value
+  // hierarchy 层级：先按层级 + parentCode 过滤；如果开了"只看有产业链"，再过滤掉 chainCount=0
+  const isHier = v === 'gics-sector' || v === 'gics-group' || v === 'gics-industry' || v === 'gics-sub'
+  if (isHier) {
+    if (v === 'gics-sector'   && d.level !== 'sector')   return false
+    if (v === 'gics-group'    && (d.level !== 'group'    || d.parentCode !== gicsSel.sector?.code))   return false
+    if (v === 'gics-industry' && (d.level !== 'industry' || d.parentCode !== gicsSel.group?.code))    return false
+    if (v === 'gics-sub'      && (d.level !== 'sub'      || d.parentCode !== gicsSel.industry?.code)) return false
+    if (showOnlyWithChains.value && (d.chainCount || 0) === 0) return false
+    return true
+  }
+  if (v === 'scene') {
+    if (d.level !== 'chain') return false
+    if (activeGicsCode.value) return d.gicsCode === activeGicsCode.value
+    if (activeFilter.value)   return d.groupKey === activeFilter.value
+    return true
+  }
+  return false
 }
 
-// landing 8 张卡（7 个大类 + 1 个全产业）
-const categoryCards = (() => {
-  const seen = new Set()
-  const list = []
-  for (const s of sectorList) {
-    if (seen.has(s.groupKey)) continue
-    seen.add(s.groupKey)
-    list.push({
-      kind: 'category',
-      key: s.groupKey,
-      name: s.groupName,
-      colorHex: s.colorHex,
-      count: sectorList.filter(x => x.groupKey === s.groupKey).length,
-      desc: CATEGORY_DESCS[s.groupKey] || '',
-    })
-  }
-  list.push({
-    kind: 'all',
-    key: '__all__',
-    name: '全产业展示',
-    colorHex: '#cfd8e2',
-    count: sectorList.length,
-    desc: '一次性查看全部 50 条产业链',
-  })
-  return list
-})()
-
-let enterCategoryFn = () => {}
-function onPickCategory(card) {
-  if (card.kind === 'all') {
-    enterCategoryFn(null)
-  } else {
-    enterCategoryFn(card.key)
-  }
+function onToggleOnlyChains() {
+  showOnlyWithChains.value = !showOnlyWithChains.value
+  // 重新走一次当前层级的"淡出 → 飞入"动画，让球按新过滤集出现
+  flyTransitionToLevelFn(viewState.value)
 }
-let backToLandingFn = () => {}
-function onBackToLanding() { backToLandingFn() }
-let showAllFn = () => {}
-function onShowAll() { showAllFn() }
+
+let onSphereClickFn = () => {}
+let flyTransitionToLevelFn = () => {}
+let jumpToChainFn = () => {}
+
+// ── 顶部搜索：匹配 50 条产业链名 / GICS 子行业名 ─────────────────
+const searchQuery = ref('')
+const searchFocused = ref(false)
+const searchResults = computed(() => {
+  const q = searchQuery.value.trim()
+  if (!q) return []
+  const lower = q.toLowerCase()
+  return sectorList.filter((s) => {
+    const name = String(s.name || '')
+    const gn = String(s.gicsName || '')
+    return name.includes(q) || name.toLowerCase().includes(lower)
+        || gn.includes(q) || gn.toLowerCase().includes(lower)
+  }).slice(0, 12)
+})
+
+function onSearchFocus() { searchFocused.value = true }
+function onSearchBlur() {
+  // 延迟关闭下拉，避免点击候选项时还没触发 click 就被 blur 关掉
+  window.setTimeout(() => { searchFocused.value = false }, 180)
+}
+function onSearchPick(chain) {
+  searchQuery.value = ''
+  searchFocused.value = false
+  jumpToChainFn(chain.dataKey, chain.gicsCode)
+}
+
+// ── 左侧 11 板块快捷 chip ────────────────────────────────────────
+const SECTOR_RAIL = gicsHierarchy.map((s) => ({
+  code: s.code,
+  name: s.name,
+  color: '#86e4ff', // 在 :style 里用真实色覆盖
+}))
+function getSectorRailColor(code) {
+  // 与 GICS_SECTOR_COLORS 保持一致（onMounted 内常量；此处复写一份保证可在模板访问）
+  const map = {
+    '10': '#ffb347', '15': '#b8aaff', '20': '#86e4ff', '25': '#ff9bbe', '30': '#a4e8a1',
+    '35': '#ff7c7c', '40': '#c4a3ff', '45': '#7eb1ff', '50': '#9af3d8', '55': '#f0d266', '60': '#d6a87a',
+  }
+  return map[code] || '#86e4ff'
+}
+function onSectorRailClick(sector) {
+  const found = gicsHierarchy.find((s) => s.code === sector.code)
+  if (!found) return
+  gicsSel.sector = found
+  gicsSel.group = null; gicsSel.industry = null; gicsSel.sub = null
+  flyTransitionToLevelFn('gics-group')
+}
 
 let cleanup = () => {}
 
@@ -463,8 +457,30 @@ onMounted(() => {
     return { width: w, height: h }
   }
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5))
+  // 自适应画质：根据屏幕 DPR + 物理分辨率自动选档，4K 客户机自动降级以保 60fps
+  //   高档：1080p/2K + DPR≤1.5，全特效
+  //   中档：2.5K 或 DPR 1.5-2，关 antialias + 关 bloom mipmap
+  //   低档：4K 或 DPR>2，关 antialias/bloom/outline，仅保留主渲染 + ShockWave
+  const quality = (() => {
+    const dpr = window.devicePixelRatio || 1
+    const maxSide = Math.max(
+      window.screen?.width || 0,
+      window.screen?.height || 0,
+      window.innerWidth || 0,
+      window.innerHeight || 0
+    )
+    if (dpr > 2 || maxSide >= 3840) {
+      return { tier: 'low',    dprCap: 1.25, antialias: false, bloom: false, bloomMipmap: false, outline: false, shockwave: true }
+    }
+    if (dpr > 1.5 || maxSide >= 2560) {
+      return { tier: 'medium', dprCap: 1.5,  antialias: false, bloom: true,  bloomMipmap: false, outline: true,  shockwave: true }
+    }
+    return     { tier: 'high',   dprCap: 2.5,  antialias: true,  bloom: true,  bloomMipmap: true,  outline: true,  shockwave: true }
+  })()
+  console.info('[BlueprintScene] quality tier =', quality.tier, '| DPR=', window.devicePixelRatio, '| screen=', window.screen?.width, 'x', window.screen?.height)
+
+  const renderer = new THREE.WebGLRenderer({ antialias: quality.antialias, powerPreference: 'high-performance' })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.dprCap))
   const initialSize = getStageSize()
   renderer.setSize(initialSize.width, initialSize.height)
   renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -491,9 +507,12 @@ onMounted(() => {
   const composer = new EffectComposer(renderer)
   composer.addPass(new RenderPass(scene, camera))
 
+  // 注意：bloom/outline 即使在低档不进 composer，也仍创建对象——
+  // 因为后续代码会调 bloomEffect.selection.add / outlineEffect.selection.add，
+  // 留着实例可避免散布大量 if 判断，selection 调用在没进 pass 时无视觉影响。
   const bloomEffect = new SelectiveBloomEffect(scene, camera, {
     blendFunction: BlendFunction.ADD,
-    mipmapBlur: true,
+    mipmapBlur: quality.bloomMipmap,
     luminanceThreshold: 0.18,
     luminanceSmoothing: 0.24,
     intensity: 0.95
@@ -517,7 +536,11 @@ onMounted(() => {
     amplitude: 0.06
   })
 
-  composer.addPass(new EffectPass(camera, bloomEffect, outlineEffect, shockWaveEffect))
+  const passEffects = []
+  if (quality.bloom)     passEffects.push(bloomEffect)
+  if (quality.outline)   passEffects.push(outlineEffect)
+  if (quality.shockwave) passEffects.push(shockWaveEffect)
+  if (passEffects.length) composer.addPass(new EffectPass(camera, ...passEffects))
 
   const world = new THREE.Group()
   const driftGroup = new THREE.Group()
@@ -781,38 +804,92 @@ onMounted(() => {
     return group
   }
 
-  // 50 个主产业球：颜色/位置/dataKey 全部由 build 脚本算好（按 GICS 大类分色，椭球面 Fibonacci 分布）
+  // 50 个产业链球：颜色/位置/dataKey 全部由 build 脚本算好（按 GICS 大类分色，椭球面 Fibonacci 分布）
   const SECTOR_DEFS = sectorList.map((s) => ({
     name: s.name,
     dataKey: s.dataKey,
     groupKey: s.groupKey,
+    gicsCode: s.gicsCode,
+    level: 'chain',
+    disabled: false,
     color: new THREE.Color(s.colorHex),
     position: new THREE.Vector3(s.position.x, s.position.y, s.position.z),
   }))
+
+  // GICS 11 板块固定调色板；该板块下的行业组/行业/子行业沿用同色
+  const GICS_SECTOR_COLORS = {
+    '10': '#ffb347', '15': '#b8aaff', '20': '#86e4ff', '25': '#ff9bbe', '30': '#a4e8a1',
+    '35': '#ff7c7c', '40': '#c4a3ff', '45': '#7eb1ff', '50': '#9af3d8', '55': '#f0d266', '60': '#d6a87a',
+  }
+  // 暂无 IPC 归集数据的子行业球用暗灰色（保留可视，但不可点）
+  const GICS_DISABLED_COLOR = '#5a6577'
+
+  // GICS 层级球（11 板块 + 27 行业组 + 71 行业 + 149 子行业 = 258 个）
+  // 全部初始隐藏；位置占位 0,0,0，真实位置由 applyLayoutForFilter() 动态算
+  const HIERARCHY_DEFS = []
+  gicsHierarchy.forEach((sector) => {
+    const sectorColorHex = GICS_SECTOR_COLORS[sector.code] || '#86e4ff'
+    const sectorColor = new THREE.Color(sectorColorHex)
+    HIERARCHY_DEFS.push({
+      dataKey: `gics:sector:${sector.code}`, level: 'sector',
+      code: sector.code, parentCode: null,
+      name: sector.name, chainCount: sector.chainCount,
+      color: sectorColor, disabled: false,
+      position: new THREE.Vector3(0, 0, 0),
+    })
+    sector.groups.forEach((group) => {
+      HIERARCHY_DEFS.push({
+        dataKey: `gics:group:${group.code}`, level: 'group',
+        code: group.code, parentCode: sector.code,
+        name: group.name, chainCount: group.chainCount,
+        color: sectorColor, disabled: false,
+        position: new THREE.Vector3(0, 0, 0),
+      })
+      group.industries.forEach((industry) => {
+        HIERARCHY_DEFS.push({
+          dataKey: `gics:industry:${industry.code}`, level: 'industry',
+          code: industry.code, parentCode: group.code,
+          name: industry.name, chainCount: industry.chainCount,
+          color: sectorColor, disabled: false,
+          position: new THREE.Vector3(0, 0, 0),
+        })
+        industry.subs.forEach((sub) => {
+          const disabled = sub.chainCount === 0
+          HIERARCHY_DEFS.push({
+            dataKey: `gics:sub:${sub.code}`, level: 'sub',
+            code: sub.code, parentCode: industry.code,
+            name: sub.name, chainCount: sub.chainCount,
+            color: disabled ? new THREE.Color(GICS_DISABLED_COLOR) : sectorColor,
+            disabled,
+            position: new THREE.Vector3(0, 0, 0),
+          })
+        })
+      })
+    })
+  })
 
   // 由真实产业链数据构建扇区：main = ['上游','中游','下游']，branches = 每段一级 children 的前 5 个完整节点
   const BRANCH_LIMIT = 5
   const SEGMENT_KEYS = ['upstream', 'midstream', 'downstream']
   const SEGMENT_LABELS = ['上游', '中游', '下游']
-  const sectorData = SECTOR_DEFS.map((def) => {
+  // IPC 归集版的"附录"二级节点（应用场景映射 / 横向信息层 / 标准合规 等）不参与产业链可视化
+  const isAppendixNode = (n) => String(n?.name || '').includes('附录')
+  const chainSectorData = SECTOR_DEFS.map((def) => {
     const graph = industryChainGraphData[def.dataKey] || {}
     const branches = []
     SEGMENT_KEYS.forEach((segKey, segIndex) => {
       const root = graph[segKey]?.root
-      const children = (root?.children || []).slice(0, BRANCH_LIMIT)
+      const children = (root?.children || []).filter((c) => !isAppendixNode(c)).slice(0, BRANCH_LIMIT)
       if (children.length) {
         branches.push({ from: segIndex, nodes: children })
       }
     })
-    return {
-      dataKey: def.dataKey,
-      groupKey: def.groupKey,
-      name: def.name,
-      color: def.color,
-      position: def.position,
-      chain: { main: SEGMENT_LABELS.slice(), branches },
-    }
+    return { ...def, chain: { main: SEGMENT_LABELS.slice(), branches } }
   })
+  // 层级球用空 chain（不会触发产业链展开逻辑，因为 onSphereClick 按 level 派发）
+  const hierarchySectorData = HIERARCHY_DEFS.map((def) => ({ ...def, chain: { main: [], branches: [] } }))
+
+  const sectorData = [...chainSectorData, ...hierarchySectorData]
 
   const stars = createStarField()
   const tunnel = createGridTunnel()
@@ -1805,8 +1882,8 @@ onMounted(() => {
     gsap.to(lookTarget, { x: overviewLookBase.x, y: overviewLookBase.y, z: overviewLookBase.z, duration: 1.15, ease: 'power3.out' })
 
     sectors.forEach((sector) => {
-      // 按 activeFilter 过滤：不属于当前大类的球继续保持隐藏，不要"返回总览"就一齐冒出来
-      const matches = !activeFilter.value || sector.userData.data.groupKey === activeFilter.value
+      // 按当前过滤（gicsCode 优先 / groupKey 次之）：不匹配的球继续保持隐藏，不要"返回总览"就一齐冒出来
+      const matches = sectorMatchesActiveFilter(sector)
       if (!matches) {
         gsap.killTweensOf(sector.position)
         gsap.killTweensOf(sector.scale)
@@ -1840,8 +1917,8 @@ onMounted(() => {
 
   // ── 方案 B：filtered 模式下用中心小椭球重排，避免少量球被挤到原大球面顶部 ──
   // groupKey=null 时直接把每个球的 currentBase 恢复成原始 basePosition（全产业模式）
-  function applyLayoutForFilter(groupKey) {
-    if (!groupKey) {
+  function applyLayoutForFilter() {
+    if (!activeFilter.value && !activeGicsCode.value) {
       sectors.forEach((s) => {
         s.userData.currentBase.copy(s.userData.basePosition)
         const off = s.userData.basePosition.clone().sub(orbitCenter)
@@ -1851,11 +1928,38 @@ onMounted(() => {
       })
       return
     }
-    const matching = sectors.filter((s) => s.userData.data.groupKey === groupKey)
+    const matching = sectors.filter(sectorMatchesActiveFilter)
     const N = matching.length
     if (!N) return
-    // 中心对齐 overviewLookBase 附近；半径随 N 缓涨，扁度 ry 较小防止上下太空
     const center = new THREE.Vector3(0, 0.4, -0.2)
+    // hierarchy 层级（板块/行业组/行业/子行业）：横向圆环（xz 平面）
+    // 借透视：前面（z 大）的球大，后面（z 小）的球小，自然拉开层次，不会糊在一起
+    const isHierarchy = viewState.value !== 'scene'
+    if (isHierarchy) {
+      const ringR = Math.max(3.8, 2.0 + 1.1 * Math.sqrt(N))   // N=11→5.65, N=6→4.7, N=3→3.9, N=2→3.8
+      // 略压扁 z 方向避免最远的球离相机太远
+      const rzFactor = 0.85
+      matching.forEach((s, i) => {
+        let target
+        if (N === 1) {
+          target = new THREE.Vector3(center.x, center.y, center.z)
+        } else {
+          const angle = (i / N) * Math.PI * 2
+          target = new THREE.Vector3(
+            center.x + Math.cos(angle) * ringR,
+            center.y,                                              // 全部同 y，相机俯视看到一圈
+            center.z + Math.sin(angle) * ringR * rzFactor,
+          )
+        }
+        s.userData.currentBase.copy(target)
+        const off = target.clone().sub(orbitCenter)
+        s.userData.orbitRadius = Math.hypot(off.x, off.z)
+        s.userData.orbitAngle = Math.atan2(off.z, off.x)
+        s.userData.orbitYOffset = target.y
+      })
+      return
+    }
+    // chain scene（默认）：原有 Fibonacci 椭球分布
     const rx = N <= 3 ? 2.2 : N <= 6 ? 3.0 : 3.7
     const ry = N <= 3 ? 0.7 : N <= 6 ? 1.15 : 1.45
     const rz = N <= 3 ? 2.2 : N <= 6 ? 3.0 : 3.7
@@ -1884,19 +1988,24 @@ onMounted(() => {
     })
   }
 
-  // 卡片爆裂式飞入：选中大类后从画面中心炸出对应的球，依次到达基础位置
-  function flyInSectors(groupKey, { fromOrigin = true } = {}) {
+  // 卡片爆裂式飞入：根据当前 activeGicsCode / activeFilter 飞入对应的球
+  function flyInSectors({ fromOrigin = true } = {}) {
     hideLabelTooltip()
     if (currentTimeline) currentTimeline.kill()
     sceneState.busy = false
     sceneState.focusedSector = null
     activeSectorKey.value = null
-    statusTitle.value = groupKey
-      ? (sectorList.find(s => s.groupKey === groupKey)?.groupName || '产业大类')
-      : '总览'
-    statusBody.value = groupKey
-      ? '已进入该大类，点击任意球体可展开产业链。点击"全产业展示"可把其它大类的球一起飞入。'
-      : '点击任意漂浮产业扇区。镜头会推近，核心脉冲触发，主链节点依次生长，分支节点随后展开。'
+    if (activeGicsCode.value) {
+      const sub = sectorList.find(s => s.gicsCode === activeGicsCode.value)
+      statusTitle.value = sub ? `${sub.gicsName}（${activeGicsCode.value}）` : '子行业'
+      statusBody.value = '已进入该 GICS 子行业，点击任意球体可展开产业链。'
+    } else if (activeFilter.value) {
+      statusTitle.value = sectorList.find(s => s.groupKey === activeFilter.value)?.groupName || '产业大类'
+      statusBody.value = '已进入该大类，点击任意球体可展开产业链。'
+    } else {
+      statusTitle.value = '总览'
+      statusBody.value = '点击任意漂浮产业扇区。镜头会推近，核心脉冲触发，主链节点依次生长，分支节点随后展开。'
+    }
 
     // 相机回到总览
     gsap.killTweensOf(camera.position)
@@ -1904,10 +2013,10 @@ onMounted(() => {
     gsap.to(camera.position, { x: overviewCameraBase.x, y: overviewCameraBase.y, z: overviewCameraBase.z, duration: 1.0, ease: 'power3.out' })
     gsap.to(lookTarget, { x: overviewLookBase.x, y: overviewLookBase.y, z: overviewLookBase.z, duration: 1.0, ease: 'power3.out' })
 
-    // 关键：进入大类视图前，先把 currentBase 重排到中心小椭球（方案 B）
-    applyLayoutForFilter(groupKey || null)
+    // 进入过滤视图前，先把 currentBase 重排到中心小椭球
+    applyLayoutForFilter()
 
-    const targets = sectors.filter((s) => !groupKey || s.userData.data.groupKey === groupKey)
+    const targets = sectors.filter(sectorMatchesActiveFilter)
     targets.forEach((sector, index) => {
       const base = sector.userData.currentBase
       const state = sector.userData.state
@@ -1946,75 +2055,27 @@ onMounted(() => {
     })
   }
 
-  // 全产业展示：
-  //  · 当前 filter 内已经可见的球：从"中心小椭球位置"滑回原始 basePosition（扩散）
-  //  · filter 之外仍隐藏的球：从场景边缘扫入到 basePosition
-  function showAllRemaining() {
-    if (!activeFilter.value) return   // 已经是全产业态，不需要再飞
-    const prevFilter = activeFilter.value
-    activeFilter.value = null
-    statusTitle.value = '总览'
-    statusBody.value = '已展示全部 50 条产业链。点击任意产业球可展开对应产业链。'
+  resetSceneFn = resetScene
 
-    // 把所有球的 currentBase 复位到原始 basePosition，并刷新 orbit 参数
-    applyLayoutForFilter(null)
-
-    sectors.forEach((sector, index) => {
-      const base = sector.userData.basePosition
-      const state = sector.userData.state
-      gsap.killTweensOf(sector.position)
-      gsap.killTweensOf(sector.scale)
-      gsap.killTweensOf(state)
-      sector.userData.activated = false
-
-      const wasVisible = sector.visible
-      if (!wasVisible) {
-        // 隐藏的球：从场景边缘 base 方向远端扫入
-        sector.visible = true
-        const dir = base.clone().normalize()
-        sector.position.set(dir.x * 24 + base.x * 0.1, base.y + dir.y * 4, dir.z * 24 + base.z * 0.1)
-        sector.scale.setScalar(0.001)
-        state.opacity = 0
-        state.glow = 0
-        sector.userData.shell.material.opacity = 0
-        sector.userData.shell.material.emissiveIntensity = 0
-        setLabelOpacity(sector.userData.label, 0)
-      }
-      // 可见球（原 filter 内）当前位于中心小椭球；直接 tween 回原始 basePosition 即可
-
-      const delay = index * 0.018
-      const dur = wasVisible ? 1.25 : 1.1
-      const ease = wasVisible ? 'power3.inOut' : 'power3.out'
-      gsap.to(sector.position, { x: base.x, y: base.y, z: base.z, duration: dur, delay, ease })
-      gsap.to(sector.scale, { x: 1.18, y: 1.18, z: 1.18, duration: dur, delay, ease })
-      gsap.to(state, {
-        opacity: 0.82, glow: 0.38, duration: dur, delay, ease: 'power2.out',
-        onUpdate: () => {
-          sector.userData.shell.material.opacity = state.opacity
-          sector.userData.shell.material.emissiveIntensity = state.glow
-          setLabelOpacity(sector.userData.label, Math.min(0.96, state.opacity * 1.2))
-        },
-        onComplete: () => { sector.userData.activated = true }
-      })
-    })
-  }
-
-  // 返回 landing：先把当前可见的球缩成黑点，再切回选择页
-  function flyOutToLanding() {
+  // 统一的"层级切换"动画：当前可见球淡出 → 切换 viewState/过滤 → 新层级球飞入
+  // options: { gicsCode, groupKey } 用于进入 chain scene
+  function flyTransitionToLevel(nextLevel, options = {}) {
+    const { gicsCode = null, groupKey = null } = options
     hideLabelTooltip()
     if (currentTimeline) currentTimeline.kill()
     sceneState.busy = false
     sceneState.focusedSector = null
     activeSectorKey.value = null
-    // 回到 landing：没有锁定节点，右侧抽屉一并关掉
     if (orgDrawer.visible) closeOrgDrawer()
 
     const targets = sectors.filter((s) => s.visible)
-    if (!targets.length) {
-      viewState.value = 'landing'
-      activeFilter.value = null
-      return
+    const applyState = () => {
+      viewState.value = nextLevel
+      activeFilter.value = groupKey
+      activeGicsCode.value = gicsCode
+      flyInSectors({ fromOrigin: true })
     }
+    if (!targets.length) { applyState(); return }
     targets.forEach((sector, index) => {
       const state = sector.userData.state
       gsap.killTweensOf(sector.position)
@@ -2022,7 +2083,7 @@ onMounted(() => {
       gsap.killTweensOf(state)
       sector.userData.activated = false
       const delay = index * 0.012
-      const dur = 0.55
+      const dur = 0.45
       gsap.to(sector.scale, { x: 0.001, y: 0.001, z: 0.001, duration: dur, delay, ease: 'power2.in' })
       gsap.to(state, {
         opacity: 0, glow: 0, duration: dur, delay, ease: 'power2.in',
@@ -2034,41 +2095,100 @@ onMounted(() => {
         onComplete: () => { sector.visible = false }
       })
     })
-    gsap.delayedCall(0.55 + targets.length * 0.012, () => {
-      viewState.value = 'landing'
-      activeFilter.value = null
+    gsap.delayedCall(0.45 + targets.length * 0.012, applyState)
+  }
+  flyTransitionToLevelFn = flyTransitionToLevel
+
+  // 顶部搜索跳转：把 gicsSel 路径补齐 → 切到 scene → 飞入完成后 focus 该球
+  function setGicsSelFromGicsCode(gicsCode) {
+    for (const sector of gicsHierarchy) {
+      for (const group of sector.groups) {
+        for (const industry of group.industries) {
+          for (const sub of industry.subs) {
+            if (sub.code === gicsCode) {
+              gicsSel.sector = sector
+              gicsSel.group = group
+              gicsSel.industry = industry
+              gicsSel.sub = sub
+              return
+            }
+          }
+        }
+      }
+    }
+  }
+  jumpToChainFn = (dataKey, gicsCode) => {
+    setGicsSelFromGicsCode(gicsCode)
+    flyTransitionToLevel('scene', { gicsCode })
+    // 等"淡出 + 飞入"动画大致完成（~1.8s）再 focus 该具体产业链球
+    gsap.delayedCall(1.8, () => {
+      const target = sectors.find((s) => s.userData?.data?.dataKey === dataKey)
+      if (target && target.visible) {
+        if (currentTimeline) currentTimeline.kill()
+        gsap.killTweensOf(camera.position)
+        gsap.killTweensOf(lookTarget)
+        sceneState.busy = false
+        focusSector(target)
+      }
     })
   }
 
-  resetSceneFn = resetScene
-  // landing → scene：选中某个大类（或全产业）后调用
-  enterCategoryFn = (groupKey) => {
-    viewState.value = 'scene'
-    activeFilter.value = groupKey || null
-    flyInSectors(groupKey, { fromOrigin: true })
-  }
-  showAllFn = () => { showAllRemaining() }
-  backToLandingFn = () => { flyOutToLanding() }
-
   // "返回上一级"语义：
   // 1) 展开了 L2 子树 → 关掉子树
-  // 2) 聚焦了某个产业 → 退到该 filter 下的总览
-  // 3) 只是站在 filter/全产业总览 → 退回 landing 选择页
+  // 2) 聚焦了某个产业链球 → 退到 chain scene 总览
+  // 3) chain scene 没聚焦 → 回 gics-sub 层
+  // 4) gics-sub / industry / group → 各自回上一级
+  // 5) gics-sector → 啥也不干（顶层）
   goBackFn = () => {
-    if (focusedBranchNode) closeBranchDetail()
-    else if (sceneState.focusedSector) resetScene()
-    else if (viewState.value === 'scene') flyOutToLanding()
+    if (focusedBranchNode) { closeBranchDetail(); return }
+    if (sceneState.focusedSector) { resetScene(); return }
+    const v = viewState.value
+    if (v === 'scene') {
+      gicsSel.sub = null
+      flyTransitionToLevel('gics-sub')
+    } else if (v === 'gics-sub') {
+      gicsSel.sub = null
+      flyTransitionToLevel('gics-industry')
+    } else if (v === 'gics-industry') {
+      gicsSel.industry = null
+      flyTransitionToLevel('gics-group')
+    } else if (v === 'gics-group') {
+      gicsSel.group = null
+      flyTransitionToLevel('gics-sector')
+    }
+    // gics-sector: 顶层 → 无动作（要回首页请点"← 返回首页"）
   }
 
-  // 产业切换菜单点击：自动处理"已聚焦其他产业 / 动画进行中"等情况
-  selectSectorByKeyFn = (key) => {
-    const target = sectors.find((s) => s.userData?.data?.dataKey === key)
-    if (!target || sceneState.focusedSector === target) return
-    if (currentTimeline) currentTimeline.kill()
-    gsap.killTweensOf(camera.position)
-    gsap.killTweensOf(lookTarget)
-    sceneState.busy = false
-    focusSector(target)
+  // 球点击派发：chain → 聚焦展开；hierarchy → 下钻
+  onSphereClickFn = (sphere) => {
+    const d = sphere.userData?.data
+    if (!d) return
+    if (d.disabled) return  // 暂无数据的子行业球，不响应
+    if (d.level === 'chain') {
+      if (sceneState.focusedSector === sphere) return
+      if (currentTimeline) currentTimeline.kill()
+      gsap.killTweensOf(camera.position)
+      gsap.killTweensOf(lookTarget)
+      sceneState.busy = false
+      focusSector(sphere)
+      return
+    }
+    if (d.level === 'sector') {
+      gicsSel.sector = gicsHierarchy.find(s => s.code === d.code) || null
+      gicsSel.group = null; gicsSel.industry = null; gicsSel.sub = null
+      flyTransitionToLevel('gics-group')
+    } else if (d.level === 'group') {
+      gicsSel.group = gicsSel.sector?.groups.find(g => g.code === d.code) || null
+      gicsSel.industry = null; gicsSel.sub = null
+      flyTransitionToLevel('gics-industry')
+    } else if (d.level === 'industry') {
+      gicsSel.industry = gicsSel.group?.industries.find(i => i.code === d.code) || null
+      gicsSel.sub = null
+      flyTransitionToLevel('gics-sub')
+    } else if (d.level === 'sub') {
+      gicsSel.sub = gicsSel.industry?.subs.find(s => s.code === d.code) || null
+      flyTransitionToLevel('scene', { gicsCode: d.code })
+    }
   }
 
 
@@ -2087,9 +2207,10 @@ onMounted(() => {
   function getLabelHitAreas() {
     // 已聚焦时，只把当前聚焦的产业球加进 hover 命中区——其它球已 visible=false，
     // 但 raycaster 不看 visible，必须显式过滤掉，否则鼠标扫过隐形位置还会冒 tooltip
+    // 308 球总池里大多数隐形，必须按 owner.visible 二次过滤
     const visibleSectorHits = sceneState.focusedSector
       ? sectorHitAreas.filter(h => h.userData?.owner === sceneState.focusedSector)
-      : sectorHitAreas
+      : sectorHitAreas.filter(h => h.userData?.owner?.visible === true)
     const areas = [...visibleSectorHits, ...branchHitAreas]
     if (!activeChain) return areas
     activeChain.nodes?.forEach((node) => {
@@ -2315,12 +2436,13 @@ onMounted(() => {
         return
       }
     }
-    // 未聚焦时 → 检测扇区点击
+    // 未聚焦时 → 检测扇区点击；按 level 派发（hierarchy 球下钻 / chain 球聚焦展开）
     if (!sceneState.focusedSector) {
-      const hit = raycaster.intersectObjects(sectorHitAreas, false)[0]
-      if (hit?.object?.userData?.owner) {
-        focusSector(hit.object.userData.owner)
-      }
+      // 注意：raycaster.intersectObjects 不看 visible，必须过滤
+      const visibleHits = sectorHitAreas.filter(h => h.userData?.owner?.visible === true)
+      const hit = raycaster.intersectObjects(visibleHits, false)[0]
+      const target = hit?.object?.userData?.owner
+      if (target) onSphereClickFn(target)
     }
   }
 
@@ -2383,10 +2505,7 @@ onMounted(() => {
 
   function onKeydown(event) {
     if (event.key === 'Escape') {
-      if (viewState.value === 'landing') return
-      if (focusedBranchNode) closeBranchDetail()
-      else if (sceneState.focusedSector) resetScene()
-      else flyOutToLanding()
+      goBackFn()
     }
   }
 
@@ -2404,10 +2523,13 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('dblclick', onDblClick)
 
-  // 不在挂载时调 resetScene —— 此时 viewState='landing'，50 球初始全部隐藏，
-  // 让前端先呈现 8 张玻璃卡片。用户点选大类后 enterCategoryFn 才把球飞入场景。
-  statusTitle.value = '总览'
-  statusBody.value = '请选择产业大类'
+  // 挂载即触发 GICS 11 板块球飞入。用户通过点击球体逐级下钻：
+  //   板块 → 行业组 → 行业 → 子行业（有数据的）→ 产业链 3D 场景
+  statusTitle.value = '选择板块'
+  statusBody.value = '点击任意板块球进入下一级'
+  viewState.value = 'gics-sector'
+  // 给 GICS 11 板块球一个伪 basePosition 以便 currentBase 初始化，正式位置由 applyLayoutForFilter 算
+  flyInSectors({ fromOrigin: true })
 
   function render() {
     const elapsed = clock.getElapsedTime()
@@ -2946,188 +3068,6 @@ onBeforeUnmount(() => cleanup())
   transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
 }
 
-.blueprint-toall-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 14px;
-  margin-top: 6px;
-  border: 1px solid rgba(207, 216, 226, 0.45);
-  border-radius: 999px;
-  background: linear-gradient(120deg, rgba(40, 60, 110, 0.85), rgba(20, 32, 64, 0.85));
-  color: #f4f8ff;
-  font-family: inherit;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-  pointer-events: auto;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 0 16px rgba(120, 163, 255, 0.32);
-  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
-}
-.blueprint-toall-btn:hover {
-  border-color: rgba(207, 216, 226, 0.8);
-  box-shadow: 0 0 22px rgba(150, 190, 255, 0.55);
-  transform: translateY(-1px);
-}
-.blueprint-toall-btn:active {
-  transform: translateY(1px);
-}
-.blueprint-toall-icon {
-  font-size: 14px;
-  line-height: 1;
-  color: rgba(180, 220, 255, 0.95);
-}
-
-/* ── Landing 选择页：8 张玻璃卡片矩阵 ─────────────────────── */
-.blueprint-landing {
-  position: absolute;
-  inset: 0;
-  z-index: 8;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 32px;
-  background: radial-gradient(ellipse at 50% 38%, rgba(20, 36, 72, 0.42) 0%, rgba(4, 8, 16, 0.78) 70%);
-  backdrop-filter: blur(2px);
-  pointer-events: auto;
-  font-family: "Segoe UI", "PingFang SC", sans-serif;
-}
-.blueprint-landing-head {
-  text-align: center;
-  margin-bottom: 36px;
-  color: rgba(220, 240, 255, 0.92);
-}
-.blueprint-landing-eyebrow {
-  margin: 0 0 6px;
-  font-size: 12px;
-  letter-spacing: 0.5em;
-  color: rgba(134, 228, 255, 0.78);
-  text-transform: uppercase;
-}
-.blueprint-landing-title {
-  margin: 0 0 10px;
-  font-size: 30px;
-  font-weight: 500;
-  letter-spacing: 0.2em;
-  color: #f4f9ff;
-  text-shadow: 0 0 18px rgba(120, 180, 255, 0.32);
-}
-.blueprint-landing-subtitle {
-  margin: 0;
-  font-size: 13px;
-  letter-spacing: 0.18em;
-  color: rgba(180, 210, 240, 0.7);
-}
-.blueprint-landing-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 220px));
-  gap: 18px;
-  width: 100%;
-  max-width: 960px;
-}
-.blueprint-landing-card {
-  --accent: #86e4ff;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  min-height: 168px;
-  padding: 20px 18px 18px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, rgba(133, 205, 255, 0.18));
-  border-radius: 18px;
-  background: linear-gradient(155deg,
-    color-mix(in srgb, var(--accent) 14%, rgba(10, 18, 36, 0.78)) 0%,
-    rgba(8, 14, 28, 0.86) 55%,
-    color-mix(in srgb, var(--accent) 8%, rgba(8, 14, 28, 0.92)) 100%);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
-    0 14px 32px rgba(0, 0, 0, 0.45),
-    0 0 22px color-mix(in srgb, var(--accent) 16%, transparent);
-  color: rgba(232, 244, 255, 0.95);
-  text-align: left;
-  cursor: pointer;
-  overflow: hidden;
-  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
-}
-.blueprint-landing-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 88% 8%,
-    color-mix(in srgb, var(--accent) 36%, transparent) 0%,
-    transparent 52%);
-  opacity: 0.6;
-  pointer-events: none;
-  transition: opacity 0.22s ease;
-}
-.blueprint-landing-card:hover {
-  transform: translateY(-3px);
-  border-color: color-mix(in srgb, var(--accent) 70%, rgba(255, 255, 255, 0.15));
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-    0 18px 38px rgba(0, 0, 0, 0.52),
-    0 0 34px color-mix(in srgb, var(--accent) 28%, transparent);
-}
-.blueprint-landing-card:hover::before {
-  opacity: 0.9;
-}
-.blueprint-landing-card.is-all {
-  --accent: #cfd8e2;
-}
-.blueprint-landing-card-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 22%, rgba(8, 14, 28, 0.6));
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  color: var(--accent);
-  font-size: 16px;
-  line-height: 1;
-  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 65%, transparent);
-}
-.blueprint-landing-card-name {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  color: #ffffff;
-  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 38%, transparent);
-}
-.blueprint-landing-card-count {
-  font-size: 11px;
-  letter-spacing: 0.24em;
-  color: color-mix(in srgb, var(--accent) 75%, rgba(220, 240, 255, 0.7));
-}
-.blueprint-landing-card-desc {
-  margin: 4px 0 0;
-  font-size: 12px;
-  line-height: 1.55;
-  letter-spacing: 0.06em;
-  color: rgba(200, 220, 240, 0.78);
-}
-
-/* landing -> scene 淡出过渡 */
-.landing-fade-enter-active,
-.landing-fade-leave-active {
-  transition: opacity 0.5s ease;
-}
-.landing-fade-enter-from,
-.landing-fade-leave-to {
-  opacity: 0;
-}
-@media (max-width: 880px) {
-  .blueprint-landing-grid {
-    grid-template-columns: repeat(2, minmax(160px, 1fr));
-    max-width: 520px;
-  }
-}
 .blueprint-back-btn:hover {
   background: rgba(20, 38, 70, 0.85);
   border-color: rgba(133, 205, 255, 0.6);
@@ -3142,55 +3082,127 @@ onBeforeUnmount(() => cleanup())
   transform: translateY(-1px);
 }
 
-/* 左上角产业切换面板 */
-.blueprint-sector-menu {
+/* ── 顶部搜索框 ─────────────────────────────────────── */
+.blueprint-search {
   position: absolute;
-  top: 20px;
-  left: 20px;
-  z-index: 6;
-  width: 178px;
-  max-height: calc(50vh - 40px);
-  padding: 12px 12px 10px;
-  border-radius: 16px;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  width: min(440px, 60vw);
+  pointer-events: auto;
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+}
+.blueprint-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(133, 205, 255, 0.32);
+  background: rgba(8, 14, 26, 0.7);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.blueprint-search-box:focus-within {
+  border-color: rgba(134, 228, 255, 0.7);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55), 0 0 18px rgba(134, 228, 255, 0.25);
+}
+.blueprint-search-icon {
+  color: rgba(134, 228, 255, 0.75);
+  font-size: 14px;
+  line-height: 1;
+}
+.blueprint-search-input {
+  flex: 1;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #f4f9ff;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  font-family: inherit;
+}
+.blueprint-search-input::placeholder { color: rgba(160, 200, 240, 0.55); }
+.blueprint-search-clear {
+  width: 20px; height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(220, 240, 255, 0.85);
+  font-size: 14px; line-height: 1;
+  cursor: pointer;
+}
+.blueprint-search-clear:hover { background: rgba(255, 255, 255, 0.2); }
+
+.blueprint-search-dropdown {
+  margin-top: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(133, 205, 255, 0.22);
+  background: rgba(8, 14, 26, 0.92);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+}
+.blueprint-search-dropdown.is-empty {
+  padding: 14px;
+  color: rgba(160, 200, 240, 0.65);
+  font-size: 12px;
+  text-align: center;
+}
+.blueprint-search-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: rgba(232, 244, 255, 0.92);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(133, 205, 255, 0.08);
+  transition: background 0.14s ease;
+}
+.blueprint-search-item:last-child { border-bottom: 0; }
+.blueprint-search-item:hover {
+  background: rgba(31, 78, 216, 0.22);
+}
+.blueprint-search-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.blueprint-search-item-meta {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(160, 200, 240, 0.7);
+}
+
+/* ── 左侧 11 板块快捷栏 ──────────────────────────────────── */
+.blueprint-sector-rail {
+  position: absolute;
+  top: 76px;
+  left: 18px;
+  z-index: 7;
+  width: 132px;
+  padding: 12px 10px;
+  border-radius: 14px;
   border: 1px solid rgba(133, 205, 255, 0.2);
   background: rgba(8, 14, 26, 0.62);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 0 28px rgba(25, 96, 180, 0.16);
+  box-shadow: 0 0 28px rgba(25, 96, 180, 0.14);
   font-family: "Segoe UI", "PingFang SC", sans-serif;
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-}
-.blueprint-sector-menu-header {
-  flex: 0 0 auto;
-}
-.blueprint-sector-menu-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
   gap: 4px;
-  padding-right: 2px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(133, 205, 255, 0.35) transparent;
 }
-.blueprint-sector-menu-list::-webkit-scrollbar {
-  width: 6px;
-}
-.blueprint-sector-menu-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-.blueprint-sector-menu-list::-webkit-scrollbar-thumb {
-  background: rgba(133, 205, 255, 0.32);
-  border-radius: 3px;
-}
-.blueprint-sector-menu-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(133, 205, 255, 0.55);
-}
-.blueprint-sector-menu-title {
+.blueprint-sector-rail-title {
   margin: 0 0 6px;
   padding: 0 4px;
   font-size: 11px;
@@ -3198,77 +3210,45 @@ onBeforeUnmount(() => cleanup())
   letter-spacing: 0.22em;
   color: rgba(150, 200, 240, 0.78);
 }
-.blueprint-sector-menu-jumps {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  margin: 0 0 8px;
-  padding: 0 0 8px;
-  border-bottom: 1px solid rgba(133, 205, 255, 0.18);
-}
-.blueprint-jump-chip {
-  min-width: 0;
-  padding: 5px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  text-align: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--accent) 16%, rgba(8, 14, 26, 0.6));
-  color: rgba(232, 246, 255, 0.92);
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.18s ease, transform 0.12s ease;
-}
-.blueprint-jump-chip:hover {
-  background: color-mix(in srgb, var(--accent) 36%, rgba(8, 14, 26, 0.6));
-  transform: translateY(-1px);
-}
-.blueprint-jump-chip:active {
-  transform: translateY(0);
-}
-.blueprint-sector-menu-item {
-  width: 100%;
+.blueprint-sector-rail-chip {
+  --rail-c: #86e4ff;
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 7px 10px;
-  margin-bottom: 4px;
+  padding: 6px 10px;
   border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
   color: rgba(220, 240, 255, 0.82);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
   text-align: left;
   cursor: pointer;
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
-.blueprint-sector-menu-item:last-child {
-  margin-bottom: 0;
-}
-.blueprint-sector-menu-item:hover {
-  background: rgba(123, 192, 255, 0.1);
-  border-color: rgba(123, 192, 255, 0.32);
+.blueprint-sector-rail-chip:hover {
+  background: color-mix(in srgb, var(--rail-c) 14%, transparent);
+  border-color: color-mix(in srgb, var(--rail-c) 45%, transparent);
   color: #ffffff;
 }
-.blueprint-sector-menu-item.is-active {
-  background: linear-gradient(90deg, rgba(123, 192, 255, 0.18), transparent 80%);
-  border-color: var(--accent);
+.blueprint-sector-rail-chip.is-active {
+  background: color-mix(in srgb, var(--rail-c) 22%, transparent);
+  border-color: var(--rail-c);
   color: #ffffff;
-  box-shadow: inset 0 0 0 1px rgba(123, 192, 255, 0.18);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--rail-c) 30%, transparent);
 }
-.blueprint-sector-menu-dot {
+.blueprint-sector-rail-dot {
   flex-shrink: 0;
-  width: 8px;
-  height: 8px;
+  width: 8px; height: 8px;
   border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 10px var(--accent);
+  background: var(--rail-c);
+  box-shadow: 0 0 10px var(--rail-c);
 }
-.blueprint-sector-menu-name {
+.blueprint-sector-rail-name {
   flex: 1;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .blueprint-status {
@@ -3279,6 +3259,46 @@ onBeforeUnmount(() => cleanup())
   background: rgba(8, 14, 26, 0.56);
   backdrop-filter: blur(16px);
   box-shadow: 0 0 28px rgba(25, 96, 180, 0.14);
+}
+
+/* "只看有产业链" 开关 */
+.blueprint-only-chains-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  margin-top: 6px;
+  border: 1px solid rgba(133, 205, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(8, 14, 26, 0.68);
+  color: rgba(220, 240, 255, 0.85);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+.blueprint-only-chains-btn:hover {
+  border-color: rgba(134, 228, 255, 0.7);
+  color: #ffffff;
+}
+.blueprint-only-chains-btn.is-active {
+  border-color: rgba(154, 243, 216, 0.85);
+  background: rgba(20, 60, 50, 0.75);
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(154, 243, 216, 0.35);
+}
+.blueprint-only-chains-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: rgba(154, 243, 216, 0.45);
+  box-shadow: 0 0 6px rgba(154, 243, 216, 0.4);
+}
+.blueprint-only-chains-btn.is-active .blueprint-only-chains-dot {
+  background: #9af3d8;
+  box-shadow: 0 0 10px #9af3d8;
 }
 
 .blueprint-status-kicker {
