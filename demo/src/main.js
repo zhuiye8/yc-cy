@@ -1,4 +1,11 @@
 import { createNavigationController, installNavigationGlobals } from "./shared/navigation.js";
+import { installVueRuntime } from "./app/runtime.js";
+import { hydrateLegacyRouteAttributes, routeForQueryType } from "./shared/legacyDomRoutes.js";
+import { useQueryStore } from "./stores/query.js";
+
+installVueRuntime();
+hydrateLegacyRouteAttributes();
+const queryStore = useQueryStore();
 
 const views = Array.from(document.querySelectorAll(".view"));
 const switchButtons = Array.from(document.querySelectorAll("[data-target]"));
@@ -148,6 +155,7 @@ function showQuerySearchMode() {
   const content = queryView?.querySelector(".query-detail-content");
   if (!content) return;
 
+  queryStore.showSearch();
   content.classList.add("is-search-mode");
   queryView.querySelectorAll(".query-detail-page").forEach((panel) => {
     panel.classList.remove("is-active");
@@ -164,6 +172,7 @@ function showQueryDetailPanel(queryType) {
 
   if (!content || !targetPanel) return false;
 
+  queryStore.showDetail(queryType);
   content.classList.remove("is-search-mode");
   queryView.querySelectorAll(".query-detail-page").forEach((panel) => {
     panel.classList.toggle("is-active", panel === targetPanel);
@@ -185,6 +194,7 @@ function getQueryTypeFromRoute(route) {
 function setActiveQueryType(queryType) {
   if (!queryType) return;
   activeQueryPanel = queryType;
+  queryStore.setActiveType(queryType);
   document.querySelectorAll(".query-side-item").forEach((item) => {
     item.classList.toggle("is-active", item.dataset.queryType === queryType);
   });
@@ -248,15 +258,9 @@ installNavigationGlobals(navigation);
 
 switchButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    const target = button.dataset.target;
-    if (target) navigation.navigateToView(target);
+    const route = button.dataset.route;
+    if (route) navigation.navigateToRoute(route);
   });
-});
-
-document.addEventListener("keydown", (event) => {
-  if (event.key === "1") navigation.navigateToView("homeView");
-  if (event.key === "2") navigation.navigateToView("queryView");
-  if (event.key === "3") navigation.navigateToView("aiView");
 });
 
 window.addEventListener("scroll", scheduleHomeSnap, { passive: true });
@@ -315,7 +319,7 @@ querySearchButton?.addEventListener("click", () => {
   activeQueryPanel = queryType;
 
   if (document.querySelector(`.query-detail-page[data-query-panel="${queryType}"]`)) {
-    navigation.navigateToRoute(`/query/${queryType}`);
+    navigation.navigateToRoute(routeForQueryType(queryType));
   } else {
     showQuerySearchMode();
     showToast("期刊详情页暂未接入");

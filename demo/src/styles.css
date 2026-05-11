@@ -49,6 +49,10 @@ button {
   display: block;
 }
 
+.legacy-dom-view-host {
+  display: contents;
+}
+
 .page-switcher {
   position: fixed;
   right: 28px;
