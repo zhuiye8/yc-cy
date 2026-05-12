@@ -1,7 +1,9 @@
 <template>
-  <LegacyDomView view-id="homeView" />
+  <HomePageMarkup />
+  <HomePageController />
 </template>
 
 <script setup>
-import LegacyDomView from './LegacyDomView.vue'
+import HomePageController from './HomePageController.vue'
+import HomePageMarkup from './markup/HomePageMarkup.vue'
 </script>

@@ -226,8 +226,109 @@
 .screen-root.detail-mode .hero-panel,
 .screen-root.detail-mode .province-panel,
 .screen-root.detail-mode .city-quick-panel { opacity: 0; transform: translateX(-32px); pointer-events: none; }
+.screen-root.detail-mode .resource-stats-panel { opacity: 0; transform: translateX(32px); pointer-events: none; }
 .screen-root.detail-mode .footer-bar { opacity: 0.4; transition: opacity 0.6s ease; }
 .screen-root.detail-mode .intel-dash-panel { opacity: 1; transform: translateX(0) scale(1); pointer-events: auto; }
+
+/* ── 右侧"科创资源地图"统计面板 ──────────────────────────── */
+.resource-stats-panel {
+  top: 96px;
+  right: 18px;
+  width: 304px;
+  padding: 14px 14px 16px;
+  border-radius: 18px;
+  z-index: 10;
+  transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.resource-stats-panel .section-head.compact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 2px 0;
+}
+.resource-stats-panel .section-head.compact span {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: rgba(146, 197, 244, 0.78);
+}
+.resource-stats-panel .section-head.compact strong {
+  font-size: 14px;
+  color: rgba(232, 244, 255, 0.96);
+  letter-spacing: 0.04em;
+}
+
+.resource-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.resource-stat-card {
+  --stat-color: #58d5ff;
+  position: relative;
+  padding: 10px 12px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(123, 195, 255, 0.16);
+  background: linear-gradient(160deg, rgba(11, 28, 60, 0.6), rgba(5, 14, 32, 0.42));
+  overflow: hidden;
+}
+.resource-stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--stat-color) 22%, transparent), transparent 65%);
+  opacity: 0.55;
+}
+
+.resource-stat-dot {
+  position: relative;
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--stat-color);
+  box-shadow: 0 0 10px var(--stat-color);
+  margin-bottom: 6px;
+}
+
+.resource-stat-body {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+.resource-stat-value {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: rgba(238, 248, 255, 0.97);
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.resource-stat-unit {
+  font-size: 11px;
+  color: rgba(160, 200, 240, 0.72);
+}
+
+.resource-stat-label {
+  position: relative;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: rgba(178, 214, 240, 0.82);
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 1440px) {
+  .resource-stats-panel { width: 268px; padding: 12px 12px 14px; }
+  .resource-stats-grid { gap: 6px; }
+  .resource-stat-card { padding: 8px 10px 10px; }
+  .resource-stat-value { font-size: 17px; }
+}
 
 /* ── Type panel layout ──────────────────────────────────── */
 .type-panels-area {

@@ -1,10 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppLayout from '../layouts/AppLayout.vue'
-import HomePage from '../pages/HomePage.vue'
-import IndustryChainPage from '../pages/IndustryChainPage.vue'
-import SpaceTrendPage from '../pages/SpaceTrendPage.vue'
-import DatabaseQueryPage from '../pages/DatabaseQueryPage.vue'
-import AiPage from '../pages/AiPage.vue'
+
+const HomePage = () => import('../pages/HomePage.vue')
+// chain 和 chain/detail 共用同一个组件引用，切换时 vue-router 复用实例，
+// 避免 BlueprintScene 卸载重建导致 3D 场景闪烁。
+const IndustryChainPage = () => import('../pages/IndustryChainPage.vue')
+const SpaceTrendPage = () => import('../pages/SpaceTrendPage.vue')
+const DatabaseQueryPage = () => import('../pages/DatabaseQueryPage.vue')
+const AiPage = () => import('../pages/AiPage.vue')
 
 export function normalizeLegacyHashRoute() {
   const hash = window.location.hash

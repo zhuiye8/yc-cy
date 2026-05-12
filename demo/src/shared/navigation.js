@@ -31,7 +31,7 @@ function navigationStore() {
 export function createNavigationController({
   activate,
   getActiveViewId,
-  syncHashOnNavigate = false,
+  syncRouteOnNavigate = false,
 } = {}) {
   if (typeof activate !== 'function') {
     throw new TypeError('createNavigationController requires an activate function')
@@ -55,7 +55,7 @@ export function createNavigationController({
     navigationStore()?.setActiveView(viewId, normalizedRoute)
     activate(viewId, { ...options, route: normalizedRoute })
 
-    const shouldSyncRoute = options.syncRoute ?? options.syncHash ?? syncHashOnNavigate
+    const shouldSyncRoute = options.syncRoute ?? options.syncHash ?? syncRouteOnNavigate
     if (shouldSyncRoute) {
       suppressNextRouteSync = true
       writeRoute(route, options.replace ? 'replace' : 'push').finally(() => {

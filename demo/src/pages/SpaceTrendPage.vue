@@ -1,7 +1,12 @@
 <template>
-  <LegacyDomView view-id="spaceView" />
+  <SpacePageMarkup />
+  <PlatformOverlay view-id="spaceView" hide-placeholder-selector=".space-panel">
+    <SpaceApp />
+  </PlatformOverlay>
 </template>
 
 <script setup>
-import LegacyDomView from './LegacyDomView.vue'
+import PlatformOverlay from './PlatformOverlay.vue'
+import SpaceApp from '../platform/SpaceApp.vue'
+import SpacePageMarkup from './markup/SpacePageMarkup.vue'
 </script>

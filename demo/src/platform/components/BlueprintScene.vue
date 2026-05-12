@@ -1,5 +1,5 @@
 <template>
-  <div :class="['blueprint-root', { 'is-org-drawer-open': orgDrawer.visible }]">
+  <div :class="['blueprint-root', { 'is-org-drawer-open': orgDrawer.visible, 'is-chain-detail-page': isChainDetailRoute }]">
     <div ref="stageRef" class="blueprint-stage"></div>
     <div
       v-if="labelTooltip.visible"
@@ -11,35 +11,44 @@
       <em v-if="labelTooltip.meta">{{ labelTooltip.meta }}</em>
     </div>
 
-    <!-- 顶部搜索框：直接搜产业链名 → 跳到 3D 场景并聚焦该球 -->
-    <div class="blueprint-search">
-      <div class="blueprint-search-box">
+    <!-- 顶部产业链筛选：自定义暗色玻璃下拉，统一产业链全景视觉风格 -->
+    <div class="blueprint-search" ref="chainPickerRoot">
+      <label class="blueprint-filter-label">产业链筛选</label>
+      <div :class="['blueprint-search-box', { 'is-open': chainPickerOpen }]">
         <span class="blueprint-search-icon">⌕</span>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="blueprint-search-input"
-          placeholder="搜索产业链 (如 AI算力芯片 / 锂电隔膜)"
-          @focus="onSearchFocus"
-          @blur="onSearchBlur"
-        >
-        <button v-if="searchQuery" type="button" class="blueprint-search-clear" @click="searchQuery = ''">×</button>
-      </div>
-      <div v-if="searchFocused && searchResults.length" class="blueprint-search-dropdown">
         <button
-          v-for="r in searchResults"
-          :key="r.dataKey"
           type="button"
-          class="blueprint-search-item"
-          @mousedown.prevent
-          @click="onSearchPick(r)"
+          class="blueprint-chain-trigger"
+          :aria-expanded="chainPickerOpen"
+          aria-haspopup="listbox"
+          @click="toggleChainPicker"
         >
-          <span class="blueprint-search-item-name">{{ r.name }}</span>
-          <span class="blueprint-search-item-meta">{{ r.gicsName }} · {{ r.gicsCode }}</span>
+          <span :class="['blueprint-chain-trigger-text', { 'is-placeholder': !selectedChainKey }]">
+            {{ selectedChainLabel }}
+          </span>
+          <span class="blueprint-chain-trigger-caret" aria-hidden="true">▾</span>
         </button>
       </div>
-      <div v-else-if="searchFocused && searchQuery && !searchResults.length" class="blueprint-search-dropdown is-empty">
-        无匹配产业链
+      <div
+        v-if="chainPickerOpen"
+        class="blueprint-search-dropdown"
+        role="listbox"
+      >
+        <button
+          v-for="chain in chainOptions"
+          :key="chain.dataKey"
+          type="button"
+          role="option"
+          :aria-selected="chain.dataKey === selectedChainKey"
+          :class="['blueprint-search-item', { 'is-selected': chain.dataKey === selectedChainKey }]"
+          @click="onChainPick(chain)"
+        >
+          <span class="blueprint-search-item-dot" :style="{ background: chain.colorHex }"></span>
+          <span class="blueprint-search-item-body">
+            <span class="blueprint-search-item-name">{{ chain.name }}</span>
+            <span class="blueprint-search-item-meta">{{ chain.groupName }} · {{ chain.gicsName }}</span>
+          </span>
+        </button>
       </div>
     </div>
 
@@ -137,6 +146,15 @@
               <span>论文 {{ item.paperCount }}</span>
               <span>成果 {{ item.achievementCount }}</span>
             </div>
+            <div class="blueprint-org-actions">
+              <button
+                type="button"
+                class="blueprint-org-detail-btn"
+                @click.stop="openOrgDetail()"
+              >
+                查看详情 <span aria-hidden="true">↗</span>
+              </button>
+            </div>
           </div>
         </article>
       </div>
@@ -154,7 +172,7 @@
         <span><i class="blueprint-dot" style="color:#fff4c4"></i>脉冲</span>
       </div>
       <div class="blueprint-actions">
-        <span v-if="viewState === 'scene'">Esc 重置/返回上一级</span>
+        <span v-if="viewState === 'scene'">左键展开 · 右键查询企业 · Esc 返回</span>
         <button v-if="viewState === 'scene'" type="button" @click="onReset">返回总览</button>
         <button type="button" class="blueprint-back" @click="emit('exit')">← 返回首页</button>
       </div>
@@ -163,7 +181,8 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import * as THREE from 'three'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js'
 import gsap from 'gsap'
@@ -183,6 +202,9 @@ import { searchChainOrgs } from '../../api/chainOrg.js'
 
 const emit = defineEmits(['exit'])
 
+const route = useRoute()
+const router = useRouter()
+const isChainDetailRoute = computed(() => route.name === 'chainDetail' || route.path.startsWith('/chain/detail'))
 const stageRef = ref(null)
 const statusTitle = ref('总览')
 const statusBody = ref('点击任意漂浮产业扇区。镜头会推近，核心脉冲触发，主链节点依次生长，分支节点随后展开。')
@@ -276,10 +298,23 @@ function resetOrgRegionFilter() {
   reloadOrgDrawerWithFilters()
 }
 
+// 企业卡片"查看详情"：window.open 新页签到机构详情 mock。
+// 用 button + @click.stop 而不是 <a target="_blank">，避免 main.js 的全局 [data-target] click 拦截器
+// 在某些 HMR/stacking 状态下错误命中导致 URL 被改写。
+function openOrgDetail() {
+  const url = router.resolve({ path: '/query/org' }).href
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 let resetSceneFn = () => {}
 const onReset = () => resetSceneFn()
 let goBackFn = () => {}
 const onGoBack = () => goBackFn()
+let syncChainDetailRouteFn = () => {}
+
+watch(() => route.fullPath, () => {
+  syncChainDetailRouteFn()
+}, { flush: 'post' })
 
 const orgProvinceOptions = chinaGeo.features
   .map((feature) => ({
@@ -389,6 +424,22 @@ function sectorMatchesActiveFilter(sector) {
 
 function onToggleOnlyChains() {
   showOnlyWithChains.value = !showOnlyWithChains.value
+
+  // 开启筛选时，如果当前所在板块整体没有产业链（chainCount=0），下钻视图等于死路，
+  // 自动跳回最高级（gics-sector）让用户重新选择
+  if (
+    showOnlyWithChains.value &&
+    viewState.value !== 'gics-sector' &&
+    (gicsSel.sector?.chainCount || 0) === 0
+  ) {
+    gicsSel.sector = null
+    gicsSel.group = null
+    gicsSel.industry = null
+    gicsSel.sub = null
+    flyTransitionToLevelFn('gics-sector')
+    return
+  }
+
   // 重新走一次当前层级的"淡出 → 飞入"动画，让球按新过滤集出现
   flyTransitionToLevelFn(viewState.value)
 }
@@ -397,38 +448,70 @@ let onSphereClickFn = () => {}
 let flyTransitionToLevelFn = () => {}
 let jumpToChainFn = () => {}
 
-// ── 顶部搜索：匹配 50 条产业链名 / GICS 子行业名 ─────────────────
-const searchQuery = ref('')
-const searchFocused = ref(false)
-const searchResults = computed(() => {
-  const q = searchQuery.value.trim()
-  if (!q) return []
-  const lower = q.toLowerCase()
-  return sectorList.filter((s) => {
-    const name = String(s.name || '')
-    const gn = String(s.gicsName || '')
-    return name.includes(q) || name.toLowerCase().includes(lower)
-        || gn.includes(q) || gn.toLowerCase().includes(lower)
-  }).slice(0, 12)
+// ── 顶部产业链筛选：暗色玻璃自定义下拉 ─────────────────────────
+const selectedChainKey = ref('')
+const chainPickerOpen = ref(false)
+const chainPickerRoot = ref(null)
+
+const chainOptions = computed(() => sectorList
+  .filter((chain) => chain?.dataKey && chain?.name)
+  .map((chain) => ({
+    dataKey: chain.dataKey,
+    name: chain.name,
+    gicsCode: chain.gicsCode,
+    gicsName: chain.gicsName || '',
+    groupName: chain.groupName || '',
+    colorHex: chain.colorHex || '#86e4ff',
+  })))
+
+const selectedChainLabel = computed(() => {
+  if (!selectedChainKey.value) return '请选择产业链'
+  return chainOptions.value.find((c) => c.dataKey === selectedChainKey.value)?.name || '请选择产业链'
 })
 
-function onSearchFocus() { searchFocused.value = true }
-function onSearchBlur() {
-  // 延迟关闭下拉，避免点击候选项时还没触发 click 就被 blur 关掉
-  window.setTimeout(() => { searchFocused.value = false }, 180)
+function toggleChainPicker() {
+  chainPickerOpen.value = !chainPickerOpen.value
 }
-function onSearchPick(chain) {
-  searchQuery.value = ''
-  searchFocused.value = false
+
+function closeChainPicker() {
+  chainPickerOpen.value = false
+}
+
+function onChainPick(chain) {
+  selectedChainKey.value = chain.dataKey
+  chainPickerOpen.value = false
   jumpToChainFn(chain.dataKey, chain.gicsCode)
 }
 
-// ── 左侧 11 板块快捷 chip ────────────────────────────────────────
-const SECTOR_RAIL = gicsHierarchy.map((s) => ({
-  code: s.code,
-  name: s.name,
-  color: '#86e4ff', // 在 :style 里用真实色覆盖
-}))
+function onChainPickerOutside(event) {
+  if (!chainPickerOpen.value) return
+  const root = chainPickerRoot.value
+  if (root && !root.contains(event.target)) closeChainPicker()
+}
+
+function onChainPickerKeydown(event) {
+  if (event.key === 'Escape' && chainPickerOpen.value) {
+    closeChainPicker()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('mousedown', onChainPickerOutside, true)
+  window.addEventListener('keydown', onChainPickerKeydown)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('mousedown', onChainPickerOutside, true)
+  window.removeEventListener('keydown', onChainPickerKeydown)
+})
+
+// ── 左侧板块快捷 chip：随"只看有产业链"动态筛选 ─────────────────
+const SECTOR_RAIL = computed(() => gicsHierarchy
+  .filter((s) => !showOnlyWithChains.value || (s.chainCount || 0) > 0)
+  .map((s) => ({
+    code: s.code,
+    name: s.name,
+    color: '#86e4ff', // 在 :style 里用真实色覆盖
+  })))
 function getSectorRailColor(code) {
   // 与 GICS_SECTOR_COLORS 保持一致（onMounted 内常量；此处复写一份保证可在模板访问）
   const map = {
@@ -665,10 +748,16 @@ onMounted(() => {
       event.preventDefault()
       event.stopPropagation()
     })
+    // 左键专心做展开/聚焦：交由 handleSceneClick 走 L1/L2 分支节点判断；这里 stopPropagation 即可
     label.element.addEventListener('pointerup', (event) => {
       event.preventDefault()
       event.stopPropagation()
-      openOrgDrawerForOwner(owner)
+    })
+    // 右键 = 查询该节点 → 跳 /chain/detail 并弹出企业抽屉
+    label.element.addEventListener('contextmenu', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      navigateToChainDetailForOwner(owner)
     })
   }
 
@@ -1918,7 +2007,10 @@ onMounted(() => {
   // ── 方案 B：filtered 模式下用中心小椭球重排，避免少量球被挤到原大球面顶部 ──
   // groupKey=null 时直接把每个球的 currentBase 恢复成原始 basePosition（全产业模式）
   function applyLayoutForFilter() {
-    if (!activeFilter.value && !activeGicsCode.value) {
+    // hierarchy 层级（板块/行业组/行业/子行业）的球 basePosition 全部是占位 (0,0,0)，
+    // 真实位置必须由本函数后半段的 ring 布局动态算；只有 chain scene 才允许回 Fibonacci 原位
+    const isHierarchy = viewState.value !== 'scene'
+    if (!isHierarchy && !activeFilter.value && !activeGicsCode.value) {
       sectors.forEach((s) => {
         s.userData.currentBase.copy(s.userData.basePosition)
         const off = s.userData.basePosition.clone().sub(orbitCenter)
@@ -1932,9 +2024,7 @@ onMounted(() => {
     const N = matching.length
     if (!N) return
     const center = new THREE.Vector3(0, 0.4, -0.2)
-    // hierarchy 层级（板块/行业组/行业/子行业）：横向圆环（xz 平面）
-    // 借透视：前面（z 大）的球大，后面（z 小）的球小，自然拉开层次，不会糊在一起
-    const isHierarchy = viewState.value !== 'scene'
+    // hierarchy 层级：横向圆环（xz 平面）；借透视拉开远近层次，避免堆叠
     if (isHierarchy) {
       const ringR = Math.max(3.8, 2.0 + 1.1 * Math.sqrt(N))   // N=11→5.65, N=6→4.7, N=3→3.9, N=2→3.8
       // 略压扁 z 方向避免最远的球离相机太远
@@ -2248,6 +2338,92 @@ onMounted(() => {
     loadOrgDrawer(chain, getOwnerLevel(owner), 1)
   }
 
+  function getFocusedSectorData() {
+    return sceneState.focusedSector?.userData?.data || null
+  }
+
+  function getChainDetailQueryForOwner(owner) {
+    const chain = getQueryableChainName(owner)
+    if (!chain) return null
+    const ownerData = owner?.userData?.data || null
+    const sectorData = ownerData?.level === 'chain' ? ownerData : getFocusedSectorData()
+    return {
+      chain: sectorData?.name || chain,
+      node: chain,
+      level: getOwnerLevel(owner),
+      dataKey: sectorData?.dataKey || activeSectorKey.value || '',
+      gicsCode: sectorData?.gicsCode || activeGicsCode.value || '',
+    }
+  }
+
+  function navigateToChainDetailForOwner(owner) {
+    const query = getChainDetailQueryForOwner(owner)
+    if (!query) return
+    // 用 replace：两个 chain 路由共用 component 已避免 3D 重建，
+    // 这里再用 replace 避免连续右键往 history 堆栈塞多条记录
+    router.replace({ name: 'chainDetail', query })
+  }
+
+  function findSectorForChainDetailQuery(query = {}) {
+    const dataKey = String(query.dataKey || '').trim()
+    const gicsCode = String(query.gicsCode || '').trim()
+    const chain = String(query.chain || query.node || '').trim()
+    return sectors.find((sector) => sector.userData?.data?.dataKey === dataKey)
+      || sectors.find((sector) => sector.userData?.data?.gicsCode === gicsCode && sector.userData?.data?.name === chain)
+      || sectors.find((sector) => sector.userData?.data?.name === chain)
+      || null
+  }
+
+  let lastSyncedDetailKey = ''
+
+  function syncChainDetailRoute() {
+    if (!isChainDetailRoute.value) {
+      lastSyncedDetailKey = ''
+      if (orgDrawer.visible) closeOrgDrawer()
+      return
+    }
+
+    const query = route.query || {}
+    const target = findSectorForChainDetailQuery(query)
+    const nodeChain = String(query.node || query.chain || target?.userData?.data?.name || '').trim()
+    const nodeLevel = String(query.level || '').trim()
+    if (!target || !nodeChain) return
+
+    const detailKey = [
+      target.userData?.data?.dataKey || '',
+      nodeChain,
+      nodeLevel,
+      route.fullPath,
+    ].join('|')
+    if (detailKey === lastSyncedDetailKey) return
+    lastSyncedDetailKey = detailKey
+
+    const targetData = target.userData?.data || {}
+    const openDrawer = () => loadOrgDrawer(nodeChain, nodeLevel || 'æµœÑ‚ç¬Ÿ', 1)
+    if (sceneState.focusedSector === target) {
+      openDrawer()
+      return
+    }
+
+    if (targetData.gicsCode && (viewState.value !== 'scene' || activeGicsCode.value !== targetData.gicsCode)) {
+      setGicsSelFromGicsCode(targetData.gicsCode)
+      flyTransitionToLevel('scene', { gicsCode: targetData.gicsCode })
+      gsap.delayedCall(1.85, () => {
+        const refreshedTarget = sectors.find((sector) => sector.userData?.data?.dataKey === targetData.dataKey) || target
+        if (currentTimeline) currentTimeline.kill()
+        sceneState.busy = false
+        focusSector(refreshedTarget)
+        openDrawer()
+      })
+      return
+    }
+
+    if (currentTimeline) currentTimeline.kill()
+    sceneState.busy = false
+    focusSector(target)
+    openDrawer()
+  }
+
   function getOwnerMeta(owner) {
     if (!owner) return ''
     const ud = owner.userData
@@ -2413,9 +2589,7 @@ onMounted(() => {
     pointer.x = p.x
     pointer.y = p.y
     raycaster.setFromCamera(pointer, camera)
-    const primaryHit = raycaster.intersectObjects(getLabelHitAreas(), false)[0]
-    const primaryOwner = getLabelOwner(primaryHit)
-    if (primaryOwner) openOrgDrawerForOwner(primaryOwner)
+    // 左键交互专注于展开/聚焦：抽屉只通过右键打开
     // 已聚焦 L1 → 先检测 L2 子节点点击（聚焦该路径，其它兄弟 L2 + 它们的 L3 变透明）
     if (sceneState.focusedSector && !sceneState.busy && focusedBranchNode) {
       const l2Areas = getSubtreeHitAreas()
@@ -2444,6 +2618,20 @@ onMounted(() => {
       const target = hit?.object?.userData?.owner
       if (target) onSphereClickFn(target)
     }
+  }
+
+  function handleSceneContextMenu(event) {
+    if (!isStagePointerEvent(event)) return
+    const p = pointerToNDC(event)
+    pointer.x = p.x
+    pointer.y = p.y
+    raycaster.setFromCamera(pointer, camera)
+    const hit = raycaster.intersectObjects(getLabelHitAreas(), false)[0]
+    const owner = getLabelOwner(hit)
+    if (!getQueryableChainName(owner)) return
+    event.preventDefault()
+    hideLabelTooltip()
+    navigateToChainDetailForOwner(owner)
   }
 
   function onPointerDown(event) {
@@ -2522,6 +2710,7 @@ onMounted(() => {
   window.addEventListener('wheel', onWheel, { passive: false })
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('dblclick', onDblClick)
+  window.addEventListener('contextmenu', handleSceneContextMenu)
 
   // 挂载即触发 GICS 11 板块球飞入。用户通过点击球体逐级下钻：
   //   板块 → 行业组 → 行业 → 子行业（有数据的）→ 产业链 3D 场景
@@ -2530,6 +2719,8 @@ onMounted(() => {
   viewState.value = 'gics-sector'
   // 给 GICS 11 板块球一个伪 basePosition 以便 currentBase 初始化，正式位置由 applyLayoutForFilter 算
   flyInSectors({ fromOrigin: true })
+  syncChainDetailRouteFn = syncChainDetailRoute
+  syncChainDetailRoute()
 
   function render() {
     const elapsed = clock.getElapsedTime()
@@ -2630,6 +2821,7 @@ onMounted(() => {
     window.removeEventListener('wheel', onWheel)
     window.removeEventListener('keydown', onKeydown)
     window.removeEventListener('dblclick', onDblClick)
+    window.removeEventListener('contextmenu', handleSceneContextMenu)
     scene.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose()
       if (obj.material) {
@@ -2998,6 +3190,38 @@ onBeforeUnmount(() => cleanup())
   font-size: 12px;
 }
 
+.blueprint-org-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.blueprint-org-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border: 1px solid rgba(133, 205, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(46, 129, 255, 0.16);
+  color: #cae9ff;
+  text-decoration: none;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.blueprint-org-detail-btn:hover,
+.blueprint-org-detail-btn:focus-visible {
+  background: rgba(46, 129, 255, 0.32);
+  border-color: rgba(180, 220, 255, 0.7);
+  color: #ffffff;
+  outline: none;
+  text-decoration: none;
+}
+
 .blueprint-org-empty {
   margin: 18px;
   padding: 28px 16px;
@@ -3089,15 +3313,23 @@ onBeforeUnmount(() => cleanup())
   left: 50%;
   transform: translateX(-50%);
   z-index: 9;
-  width: min(440px, 60vw);
+  width: min(420px, 56vw);
   pointer-events: auto;
   font-family: "Segoe UI", "PingFang SC", sans-serif;
+}
+.blueprint-filter-label {
+  display: block;
+  margin: 0 0 6px 14px;
+  color: rgba(202, 226, 255, 0.82);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
 }
 .blueprint-search-box {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 38px;
+  height: 40px;
   padding: 0 12px;
   border-radius: 999px;
   border: 1px solid rgba(133, 205, 255, 0.32);
@@ -3114,18 +3346,45 @@ onBeforeUnmount(() => cleanup())
   font-size: 14px;
   line-height: 1;
 }
-.blueprint-search-input {
+/* 自定义触发器：模拟 select 外观，但下拉用我们自己的暗色玻璃列表 */
+.blueprint-chain-trigger {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   height: 100%;
+  padding: 0;
   border: 0;
   outline: none;
   background: transparent;
   color: #f4f9ff;
   font-size: 13px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   font-family: inherit;
+  cursor: pointer;
+  min-width: 0;
 }
-.blueprint-search-input::placeholder { color: rgba(160, 200, 240, 0.55); }
+.blueprint-chain-trigger-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.blueprint-chain-trigger-text.is-placeholder {
+  color: rgba(180, 210, 240, 0.55);
+}
+.blueprint-chain-trigger-caret {
+  color: rgba(180, 210, 240, 0.7);
+  font-size: 12px;
+  line-height: 1;
+  transition: transform 0.18s ease;
+}
+.blueprint-search-box.is-open .blueprint-chain-trigger-caret {
+  transform: rotate(180deg);
+}
 .blueprint-search-clear {
   width: 20px; height: 20px;
   border: 0;
@@ -3147,6 +3406,22 @@ onBeforeUnmount(() => cleanup())
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
+  /* Firefox 细滚动条 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(134, 228, 255, 0.45) transparent;
+}
+.blueprint-search-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+.blueprint-search-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+.blueprint-search-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(134, 228, 255, 0.32);
+  border-radius: 3px;
+}
+.blueprint-search-dropdown::-webkit-scrollbar-thumb:hover {
+  background: rgba(134, 228, 255, 0.55);
 }
 .blueprint-search-dropdown.is-empty {
   padding: 14px;
@@ -3156,10 +3431,10 @@ onBeforeUnmount(() => cleanup())
 }
 .blueprint-search-item {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 10px 14px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 14px;
   border: 0;
   background: transparent;
   color: rgba(232, 244, 255, 0.92);
@@ -3167,21 +3442,49 @@ onBeforeUnmount(() => cleanup())
   text-align: left;
   cursor: pointer;
   border-bottom: 1px solid rgba(133, 205, 255, 0.08);
-  transition: background 0.14s ease;
+  transition: background 0.14s ease, color 0.14s ease;
 }
 .blueprint-search-item:last-child { border-bottom: 0; }
 .blueprint-search-item:hover {
   background: rgba(31, 78, 216, 0.22);
+  color: #ffffff;
+}
+.blueprint-search-item.is-selected {
+  background: rgba(31, 78, 216, 0.35);
+  color: #ffffff;
+}
+.blueprint-search-item-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+.blueprint-search-item-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 .blueprint-search-item-name {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .blueprint-search-item-meta {
   font-size: 11px;
   letter-spacing: 0.08em;
   color: rgba(160, 200, 240, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* ── 左侧 11 板块快捷栏 ──────────────────────────────────── */
@@ -3190,8 +3493,8 @@ onBeforeUnmount(() => cleanup())
   top: 76px;
   left: 18px;
   z-index: 7;
-  width: 132px;
-  padding: 12px 10px;
+  width: 184px;
+  padding: 12px 12px;
   border-radius: 14px;
   border: 1px solid rgba(133, 205, 255, 0.2);
   background: rgba(8, 14, 26, 0.62);
@@ -3215,7 +3518,7 @@ onBeforeUnmount(() => cleanup())
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 6px 10px;
+  padding: 7px 10px;
   border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
@@ -3246,9 +3549,10 @@ onBeforeUnmount(() => cleanup())
 }
 .blueprint-sector-rail-name {
   flex: 1;
-  white-space: nowrap;
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .blueprint-status {

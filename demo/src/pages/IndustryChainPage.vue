@@ -1,7 +1,7 @@
 <template>
-  <LegacyDomView view-id="chainView" />
+  <ChainScenePage />
 </template>
 
 <script setup>
-import LegacyDomView from './LegacyDomView.vue'
+import ChainScenePage from './ChainScenePage.vue'
 </script>

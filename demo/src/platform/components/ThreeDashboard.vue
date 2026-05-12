@@ -75,6 +75,29 @@
       </div>
     </section>
 
+    <!-- Resource stats panel (右侧"科创资源地图"，详情模式下自动隐藏) -->
+    <section class="hud resource-stats-panel glass-card">
+      <div class="section-head compact">
+        <span>科创资源地图</span>
+        <strong>{{ resourceStatsRegionLabel }}</strong>
+      </div>
+      <div class="resource-stats-grid">
+        <div
+          v-for="stat in resourceStats"
+          :key="stat.key"
+          class="resource-stat-card"
+          :style="{ '--stat-color': stat.color }"
+        >
+          <span class="resource-stat-dot" aria-hidden="true"></span>
+          <div class="resource-stat-body">
+            <strong class="resource-stat-value">{{ formatResourceValue(stat.value) }}</strong>
+            <span class="resource-stat-unit">{{ stat.unit }}</span>
+          </div>
+          <div class="resource-stat-label">{{ stat.label }}</div>
+        </div>
+      </div>
+    </section>
+
     <!-- Intel dashboard panel -->
     <IntelDashPanel
       :particle-data="selectedParticleData"
@@ -157,6 +180,7 @@ import {
   provinceGeoMap, cityGeoMap,
 } from '../data/map-scene-data.js'
 import { buildWuhanActivityDetail } from '../data/activity-details.js'
+import { buildResourceStats, getResourceStatRegionLabel } from '../data/resource-stats.js'
 
 // ── Composables ───────────────────────────────────────────────────────────────
 import { useGlobeScene } from '../composables/useGlobeScene.js'
@@ -282,6 +306,13 @@ const currentSpaceTrendRegion = computed(() => {
   }
   return { level: 'COUNTRY', regionName: '', code: '' }
 })
+
+// 右侧"科创资源地图"面板：随当前选中区域切换数字；详情模式下隐藏（CSS 控制）
+const resourceStats = computed(() => buildResourceStats(currentSpaceTrendRegion.value.level, currentSpaceTrendRegion.value.code))
+const resourceStatsRegionLabel = computed(() => getResourceStatRegionLabel(currentSpaceTrendRegion.value.level, currentSpaceTrendRegion.value.regionName))
+function formatResourceValue(value) {
+  return new Intl.NumberFormat('zh-CN').format(Math.max(0, Math.round(value)))
+}
 
 const heroStats = computed(() => {
   if (selectedCity.value) {

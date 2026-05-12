@@ -14,7 +14,7 @@ export const PAGE_DEFINITIONS = [
     name: 'home',
     path: '/home',
     viewId: 'homeView',
-    label: '产业链全景',
+    label: '首页',
     section: 'home',
   },
   {

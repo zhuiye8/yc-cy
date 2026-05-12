@@ -49,10 +49,6 @@ button {
   display: block;
 }
 
-.legacy-dom-view-host {
-  display: contents;
-}
-
 .page-switcher {
   position: fixed;
   right: 28px;
@@ -1187,8 +1183,9 @@ button {
   z-index: 2;
   width: 438px;
   background:
-    url("../assets/extracted/query_sidebar_line.jpg") left bottom / 438px 452px no-repeat,
-    linear-gradient(180deg, #fff 0%, #f5f9ff 50%, #eef4ff 100%);
+    url("../assets/extracted/query_sidebar_art.png") left bottom / 180% auto no-repeat,
+    linear-gradient(180deg, #fff 0%, #fff 58%, #c9d6ec 100%);
+  box-shadow: inset -1px 0 0 rgba(131, 166, 210, 0.18), 16px 0 34px rgba(69, 112, 174, 0.05);
 }
 
 .query-left-brand {
@@ -1525,32 +1522,34 @@ button {
   top: 108px;
   bottom: 0;
   z-index: 2;
-  width: 416px;
+  width: var(--ai-sidebar-w);
   background:
-    url("../assets/extracted/query_sidebar_line.jpg") left bottom 0 / 416px 430px no-repeat,
-    linear-gradient(180deg, #fff 0%, #f7fbff 49%, #eef4ff 100%);
+    url("../assets/extracted/ai_sidebar_art.png") left bottom / 180% auto no-repeat,
+    linear-gradient(180deg, #fff 0%, #fff 58%, #c9d6ec 100%);
 }
 
 .ai-brand-real {
   position: absolute;
-  left: 18px;
-  top: 43px;
+  left: 40px;
+  top: 64px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 20px;
+  height: 68px;
 }
 
 .ai-brand-real img {
-  width: 77px;
-  height: 77px;
-  border-radius: 18px;
+  width: 68px;
+  height: 68px;
+  object-fit: cover;
+  object-position: left center;
 }
 
 .ai-brand-real strong {
-  color: #142b58;
-  font-size: 30px;
+  color: #0a2d5c;
+  font-size: 29px;
   line-height: 1;
-  font-weight: 400;
+  font-weight: 900;
   white-space: nowrap;
 }
 
@@ -2510,7 +2509,7 @@ button {
   --topbar-action-w: clamp(220px, 16.4vw, 315px);
   --topbar-action-h: clamp(44px, 3.08vw, 59px);
   --query-sidebar-w: clamp(300px, 21.8vw, 418px);
-  --ai-sidebar-w: clamp(304px, 21.7vw, 416px);
+  --ai-sidebar-w: var(--query-sidebar-w);
   --work-frame-max: 1880px;
   --work-frame-w: min(100vw, var(--work-frame-max));
   --work-frame-x: max(0px, calc((100vw - var(--work-frame-w)) / 2));
@@ -2767,13 +2766,14 @@ body {
 .query-left {
   width: var(--query-sidebar-w);
   background:
-    url("../assets/extracted/query_sidebar_line.jpg") left bottom / 100% auto no-repeat,
-    linear-gradient(180deg, #fff 0%, #f5f9ff 50%, #eef4ff 100%);
+    url("../assets/extracted/query_sidebar_art.png") left bottom / 180% auto no-repeat,
+    linear-gradient(180deg, #fff 0%, #fff 58%, #c9d6ec 100%);
+  box-shadow: inset -1px 0 0 rgba(131, 166, 210, 0.18), 16px 0 34px rgba(69, 112, 174, 0.05);
 }
 
 .query-left-brand {
   left: clamp(24px, 1.98vw, 38px);
-  top: clamp(36px, 3.05vw, 58px);
+  top: clamp(24px, 2vw, 38px);
   gap: clamp(12px, 0.94vw, 18px);
 }
 
@@ -2816,7 +2816,7 @@ body {
 
 .query-headline {
   left: var(--content-pad-x);
-  top: clamp(188px, 13.9vw, 267px);
+  top: clamp(170px, 21vh, 267px);
 }
 
 .query-headline h1 {
@@ -2838,7 +2838,7 @@ body {
 .query-search-card {
   left: clamp(24px, 1.52vw, 29px);
   right: clamp(24px, 2.8vw, 54px);
-  top: clamp(474px, 29.7vw, 571px);
+  top: clamp(340px, 42vh, 571px);
   width: auto;
   height: auto;
   min-height: clamp(254px, 16.25vw, 312px);
@@ -2882,8 +2882,8 @@ body {
 .ai-left-real {
   width: var(--ai-sidebar-w);
   background:
-    url("../assets/extracted/query_sidebar_line.jpg") left bottom 0 / 100% auto no-repeat,
-    linear-gradient(180deg, #fff 0%, #f7fbff 49%, #eef4ff 100%);
+    url("../assets/extracted/ai_sidebar_art.png") left bottom / 180% auto no-repeat,
+    linear-gradient(180deg, #fff 0%, #fff 58%, #c9d6ec 100%);
 }
 
 .ai-brand-real strong {
@@ -2972,7 +2972,7 @@ body {
     --topbar-tabs-w: min(690px, calc(100vw - var(--topbar-tabs-x) - var(--topbar-action-w) - 72px));
     --topbar-action-w: 188px;
     --query-sidebar-w: clamp(286px, 21vw, 318px);
-    --ai-sidebar-w: clamp(286px, 21vw, 304px);
+    --ai-sidebar-w: var(--query-sidebar-w);
   }
 
   .query-about {
@@ -2996,7 +2996,7 @@ body {
     --topbar-action-w: 54px;
     --topbar-action-right: 12px;
     --query-sidebar-w: 260px;
-    --ai-sidebar-w: 260px;
+    --ai-sidebar-w: var(--query-sidebar-w);
   }
 
   .query-tabs {
@@ -3052,7 +3052,7 @@ body {
     --topbar-tabs-x: 156px;
     --topbar-tabs-w: calc(100vw - 238px);
     --query-sidebar-w: 232px;
-    --ai-sidebar-w: 232px;
+    --ai-sidebar-w: var(--query-sidebar-w);
   }
 
   .query-top-logo {
@@ -3709,11 +3709,40 @@ body {
 }
 
 .query-content.query-detail-content.is-search-mode {
+  --query-search-bg: url("../assets/extracted/query_bg_org.png");
+  --query-search-bg-position: center bottom;
+  --query-hero-h: clamp(390px, 52vh, 560px);
   height: calc(100% - var(--topbar-h));
   min-height: calc(100vh - var(--topbar-h));
   overflow: hidden;
   padding: 0;
-  background: url("../assets/extracted/query_main_clean.png") left top / cover no-repeat;
+  background:
+    linear-gradient(180deg, rgba(237, 246, 255, 0) 0 var(--query-hero-h), rgba(237, 246, 255, 0.18) calc(var(--query-hero-h) + 18px), #edf6ff calc(var(--query-hero-h) + 92px), rgba(237, 246, 255, 0.88) 100%),
+    linear-gradient(90deg, rgba(237, 246, 255, 0.98) 0%, rgba(237, 246, 255, 0.76) 36%, rgba(237, 246, 255, 0.18) 72%, rgba(237, 246, 255, 0) 100%),
+    url("../assets/extracted/query_hero_bg.jpg") center top / 100% var(--query-hero-h) no-repeat,
+    linear-gradient(180deg, rgba(237, 246, 255, 0.98) 0%, rgba(237, 246, 255, 0.56) 20%, rgba(237, 246, 255, 0.2) 100%),
+    var(--query-search-bg) var(--query-search-bg-position) / 100% auto no-repeat,
+    #edf6ff;
+}
+
+.query-content.query-detail-content.is-search-mode[data-query-type="org"] {
+  --query-search-bg: url("../assets/extracted/query_bg_org.png");
+  --query-search-bg-position: center bottom;
+}
+
+.query-content.query-detail-content.is-search-mode[data-query-type="talent"] {
+  --query-search-bg: url("../assets/extracted/query_bg_talent.png");
+  --query-search-bg-position: center bottom;
+}
+
+.query-content.query-detail-content.is-search-mode[data-query-type="patent"] {
+  --query-search-bg: url("../assets/extracted/query_bg_patent.png");
+  --query-search-bg-position: center bottom;
+}
+
+.query-content.query-detail-content.is-search-mode[data-query-type="journal"] {
+  --query-search-bg: url("../assets/extracted/query_bg_journal.png");
+  --query-search-bg-position: center bottom;
 }
 
 .query-detail-content.is-search-mode > .query-detail-page {
@@ -3723,6 +3752,472 @@ body {
 .query-detail-content.is-search-mode > .query-headline,
 .query-detail-content.is-search-mode > .query-search-card {
   display: block;
+}
+
+html:has(#queryView.is-active),
+body:has(#queryView.is-active),
+html:has(#aiView.is-active),
+body:has(#aiView.is-active) {
+  height: 100%;
+  overflow: hidden;
+}
+
+body:has(#queryView.is-active) .site-shell,
+body:has(#aiView.is-active) .site-shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
+body:has(#queryView.is-active) .query-real,
+body:has(#aiView.is-active) .ai-real {
+  width: 100%;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+body:has(#queryView.is-active) .query-topbar,
+body:has(#aiView.is-active) .query-topbar {
+  width: 100%;
+}
+
+body:has(#queryView.is-active) .query-content,
+body:has(#aiView.is-active) .ai-content-real {
+  height: calc(100vh - var(--topbar-h));
+  min-height: 0;
+}
+
+body:has(#queryView.is-active) .query-content.query-detail-content:not(.is-search-mode),
+body:has(#aiView.is-active) .ai-content-real {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(45, 115, 238, 0.48) rgba(214, 228, 247, 0.42);
+}
+
+body:has(#queryView.is-active) .query-content.query-detail-content:not(.is-search-mode)::-webkit-scrollbar,
+body:has(#aiView.is-active) .ai-content-real::-webkit-scrollbar {
+  width: 8px;
+}
+
+body:has(#queryView.is-active) .query-content.query-detail-content:not(.is-search-mode)::-webkit-scrollbar-track,
+body:has(#aiView.is-active) .ai-content-real::-webkit-scrollbar-track {
+  background: rgba(214, 228, 247, 0.42);
+  border-radius: 999px;
+}
+
+body:has(#queryView.is-active) .query-content.query-detail-content:not(.is-search-mode)::-webkit-scrollbar-thumb,
+body:has(#aiView.is-active) .ai-content-real::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(84, 152, 255, 0.82), rgba(20, 95, 220, 0.82));
+  box-shadow: inset 0 0 0 2px rgba(239, 246, 255, 0.72);
+}
+
+body:has(#queryView.is-active) .query-content.query-detail-content.is-search-mode {
+  height: calc(100vh - var(--topbar-h));
+  min-height: 0;
+}
+
+body:has(#queryView.is-active) .query-detail-content.is-search-mode .query-headline {
+  top: clamp(175px, 24vh, 290px);
+}
+
+body:has(#queryView.is-active) .query-detail-content.is-search-mode .query-search-card {
+  top: clamp(430px, 56vh, 570px);
+  left: clamp(28px, 3vw, 58px);
+  right: clamp(28px, 3vw, 58px);
+  min-height: clamp(236px, 28vh, 312px);
+  background: rgba(248, 253, 255, 0.88);
+  border: 1px solid rgba(179, 207, 240, 0.38);
+  box-shadow: 0 28px 62px rgba(92, 132, 184, 0.16);
+  backdrop-filter: blur(8px);
+}
+
+/* AI analysis workspace */
+body:has(#aiView.is-active) .ai-left-real {
+  display: flex;
+  flex-direction: column;
+  padding: clamp(24px, 2vw, 38px) clamp(18px, 1.35vw, 26px);
+  background:
+    url("../assets/extracted/ai_sidebar_art.png") left bottom / 180% auto no-repeat,
+    linear-gradient(180deg, #fff 0%, #fff 58%, #c9d6ec 100%);
+  box-shadow: 18px 0 44px rgba(73, 112, 169, 0.08);
+}
+
+body:has(#aiView.is-active) .ai-brand-real,
+body:has(#aiView.is-active) .ai-new-real,
+body:has(#aiView.is-active) .ai-search-real,
+body:has(#aiView.is-active) .ai-menu-real,
+body:has(#aiView.is-active) .ai-recent,
+body:has(#aiView.is-active) .ai-all-chat {
+  position: static;
+}
+
+body:has(#aiView.is-active) .ai-brand-real {
+  gap: clamp(12px, 0.94vw, 18px);
+  height: auto;
+}
+
+body:has(#aiView.is-active) .ai-brand-real img {
+  width: clamp(46px, 3.15vw, 60px);
+  height: clamp(46px, 3.15vw, 60px);
+  object-fit: cover;
+  object-position: left center;
+}
+
+body:has(#aiView.is-active) .ai-brand-real strong {
+  max-width: calc(var(--ai-sidebar-w) - 98px);
+  overflow: hidden;
+  color: #0a2d5c;
+  font-size: clamp(19px, 1.36vw, 26px);
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body:has(#aiView.is-active) .ai-new-real {
+  width: 100%;
+  height: clamp(48px, 3.2vw, 58px);
+  margin-top: clamp(24px, 2vw, 36px);
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1e7cff, #0d56db);
+  box-shadow: 0 14px 28px rgba(26, 107, 232, 0.22);
+  font-size: clamp(17px, 1.05vw, 20px);
+}
+
+body:has(#aiView.is-active) .ai-search-real {
+  width: 100%;
+  height: clamp(46px, 3vw, 54px);
+  margin-top: clamp(14px, 1vw, 18px);
+  grid-template-columns: 34px 1fr;
+  padding-inline: 18px;
+  border: 1px solid rgba(118, 158, 214, 0.22);
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgba(70, 100, 150, 0.08);
+}
+
+body:has(#aiView.is-active) .ai-search-real span {
+  width: 19px;
+  height: 19px;
+  border-width: 2px;
+}
+
+body:has(#aiView.is-active) .ai-search-real span::after {
+  right: -8px;
+  bottom: -5px;
+  width: 11px;
+  height: 2px;
+}
+
+body:has(#aiView.is-active) .ai-search-real input {
+  font-size: clamp(15px, 0.94vw, 18px);
+}
+
+body:has(#aiView.is-active) .ai-menu-real {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-top: clamp(14px, 1vw, 18px);
+}
+
+body:has(#aiView.is-active) .ai-menu-real button {
+  width: auto;
+  height: clamp(42px, 2.8vw, 50px);
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(111, 151, 205, 0.24);
+  border-radius: 14px;
+  font-size: clamp(15px, 0.98vw, 18px);
+  text-align: center;
+}
+
+body:has(#aiView.is-active) .ai-menu-real button.is-active {
+  border-color: rgba(45, 112, 238, 0.24);
+  background: linear-gradient(180deg, #eaf3ff, #dceafe);
+}
+
+body:has(#aiView.is-active) .ai-recent {
+  display: none;
+}
+
+body:has(#aiView.is-active) .ai-recent::-webkit-scrollbar {
+  width: 6px;
+}
+
+body:has(#aiView.is-active) .ai-recent::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(45, 115, 238, 0.42);
+}
+
+body:has(#aiView.is-active) .ai-recent h3 {
+  margin-bottom: 12px;
+  color: #4a5d79;
+  font-size: clamp(15px, 0.94vw, 18px);
+}
+
+body:has(#aiView.is-active) .ai-recent button {
+  width: 100%;
+  min-height: 0;
+  margin-bottom: 10px;
+  padding: 13px 14px;
+  border: 1px solid rgba(104, 144, 198, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.64);
+  font-size: clamp(14px, 0.88vw, 16px);
+  line-height: 1.35;
+}
+
+body:has(#aiView.is-active) .ai-recent button.is-active {
+  border-color: rgba(45, 112, 238, 0.22);
+  background: rgba(224, 237, 255, 0.92);
+}
+
+body:has(#aiView.is-active) .ai-recent small {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+body:has(#aiView.is-active) .ai-all-chat {
+  display: none;
+}
+
+body:has(#aiView.is-active) .ai-content-real {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: clamp(14px, 1.1vw, 20px);
+  padding: clamp(18px, 1.45vw, 28px);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 18% 4%, rgba(79, 155, 255, 0.18), transparent 34%),
+    linear-gradient(180deg, #eef6ff 0%, #f8fbff 56%, #ffffff 100%);
+}
+
+body:has(#aiView.is-active) .ai-hero-real {
+  height: clamp(154px, 15vh, 210px);
+  padding: clamp(28px, 3.5vh, 54px) clamp(34px, 3.2vw, 62px);
+  border: 1px solid rgba(116, 160, 218, 0.2);
+  border-radius: clamp(20px, 1.5vw, 28px);
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(226, 241, 255, 0.96) 0%, rgba(226, 241, 255, 0.82) 42%, rgba(226, 241, 255, 0.18) 72%),
+    url("../assets/extracted/ai_hero_bg.jpg") center 36% / cover no-repeat;
+  box-shadow: 0 18px 48px rgba(75, 118, 176, 0.12);
+}
+
+body:has(#aiView.is-active) .ai-hero-real::after {
+  content: "产业情报梳理  /  技术趋势推演  /  结构化报告";
+  position: absolute;
+  left: auto;
+  right: clamp(34px, 3.2vw, 62px);
+  bottom: clamp(22px, 2.4vh, 34px);
+  padding: 8px 14px;
+  border: 1px solid rgba(63, 118, 196, 0.16);
+  border-radius: 999px;
+  color: #31547f;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: clamp(13px, 0.88vw, 16px);
+  font-weight: 800;
+  backdrop-filter: blur(10px);
+}
+
+body:has(#aiView.is-active) .ai-hero-real h1 {
+  margin-bottom: 14px;
+  color: #0b3470;
+  font-size: clamp(34px, 2.35vw, 46px);
+  font-weight: 900;
+}
+
+body:has(#aiView.is-active) .ai-hero-real p {
+  margin: 0;
+  max-width: 680px;
+  font-size: clamp(17px, 1.15vw, 22px);
+  line-height: 1.45;
+}
+
+body:has(#aiView.is-active) .ai-chat-real {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  padding: clamp(22px, 1.65vw, 32px) max(clamp(28px, 2.2vw, 42px), calc((100% - 1160px) / 2)) clamp(18px, 1.4vw, 26px);
+  border: 1px solid rgba(112, 154, 210, 0.18);
+  border-radius: clamp(20px, 1.5vw, 28px);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 20px 48px rgba(75, 118, 176, 0.1);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(45, 115, 238, 0.48) rgba(214, 228, 247, 0.42);
+}
+
+body:has(#aiView.is-active) .ai-chat-real::-webkit-scrollbar {
+  width: 8px;
+}
+
+body:has(#aiView.is-active) .ai-chat-real::-webkit-scrollbar-track {
+  background: rgba(214, 228, 247, 0.42);
+  border-radius: 999px;
+}
+
+body:has(#aiView.is-active) .ai-chat-real::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(84, 152, 255, 0.82), rgba(20, 95, 220, 0.82));
+  box-shadow: inset 0 0 0 2px rgba(239, 246, 255, 0.72);
+}
+
+body:has(#aiView.is-active) .ai-user-msg {
+  width: min(720px, 72%);
+  min-height: 0;
+  padding: 20px 112px 18px 28px;
+  border-radius: 18px;
+}
+
+body:has(#aiView.is-active) .ai-user-msg p {
+  font-size: clamp(16px, 1.02vw, 20px);
+  line-height: 1.45;
+}
+
+body:has(#aiView.is-active) .ai-user-msg time {
+  right: 46px;
+  bottom: 18px;
+  font-size: 14px;
+}
+
+body:has(#aiView.is-active) .ai-user-msg span {
+  right: 20px;
+  bottom: 16px;
+}
+
+body:has(#aiView.is-active) .ai-answer {
+  grid-template-columns: clamp(48px, 3.4vw, 64px) minmax(0, 1fr);
+  column-gap: clamp(18px, 1.45vw, 28px);
+  margin-top: clamp(24px, 2vw, 38px);
+}
+
+body:has(#aiView.is-active) .ai-answer > img {
+  width: clamp(46px, 3vw, 58px);
+  height: clamp(46px, 3vw, 58px);
+  margin-top: 6px;
+  border-radius: 14px;
+}
+
+body:has(#aiView.is-active) .ai-answer > div {
+  min-height: 0;
+  max-width: 1040px;
+  padding: clamp(22px, 1.55vw, 30px);
+  border: 1px solid rgba(118, 158, 214, 0.16);
+  border-radius: 20px;
+  color: #20315e;
+  font-size: clamp(15px, 0.98vw, 18px);
+  line-height: 1.72;
+  box-shadow: 0 18px 42px rgba(70, 102, 160, 0.1);
+}
+
+body:has(#aiView.is-active) .ai-answer h2 {
+  margin: 20px 0 10px;
+  font-size: clamp(20px, 1.35vw, 26px);
+}
+
+body:has(#aiView.is-active) .ai-preview-card {
+  height: clamp(160px, 21vh, 230px);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(17, 98, 229, 0.12), rgba(60, 190, 255, 0.14)),
+    url("../assets/extracted/ai_chat_reference.jpg") center / cover no-repeat;
+}
+
+body:has(#aiView.is-active) .ai-suggestions {
+  margin: clamp(18px, 1.6vw, 28px) 0 0 clamp(66px, 4.9vw, 92px);
+  gap: 10px;
+}
+
+body:has(#aiView.is-active) .ai-suggestions button {
+  height: auto;
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid rgba(75, 123, 190, 0.16);
+  border-radius: 999px;
+  color: #2d5f9e;
+  background: #f1f7ff;
+  font-size: clamp(13px, 0.85vw, 16px);
+}
+
+body:has(#aiView.is-active) .ai-composer-real {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  width: auto;
+  height: auto;
+  min-height: 74px;
+  margin: clamp(18px, 1.5vw, 26px) 0 0 clamp(66px, 4.9vw, 92px);
+  padding: 12px 74px 12px 18px;
+  border: 1px solid rgba(79, 128, 194, 0.18);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -10px 26px rgba(72, 107, 160, 0.12);
+  backdrop-filter: blur(12px);
+}
+
+body:has(#aiView.is-active) .ai-composer-real input {
+  height: 30px;
+  font-size: clamp(15px, 0.95vw, 18px);
+}
+
+body:has(#aiView.is-active) .ai-composer-real div {
+  position: static;
+  max-width: calc(100% - 20px);
+  margin-top: 8px;
+  gap: 8px;
+}
+
+body:has(#aiView.is-active) .ai-composer-real div button {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #55708f;
+  background: #eef5ff;
+  font-size: 12px;
+}
+
+body:has(#aiView.is-active) .ai-send-real {
+  right: 16px;
+  bottom: 16px;
+  width: 44px;
+  height: 44px;
+}
+
+@media (max-height: 960px) {
+  body:has(#queryView.is-active) .query-headline {
+    top: clamp(110px, 15vh, 180px);
+  }
+
+  body:has(#queryView.is-active) .query-headline h1 {
+    font-size: clamp(30px, 4.8vh, 44px);
+  }
+
+  body:has(#queryView.is-active) .query-headline b {
+    margin: clamp(16px, 2.6vh, 26px) 0 clamp(14px, 2.2vh, 22px);
+  }
+
+  body:has(#queryView.is-active) .query-headline p {
+    font-size: clamp(17px, 2.7vh, 23px);
+  }
+
+  body:has(#queryView.is-active) .query-search-card {
+    top: clamp(306px, 46vh, 390px);
+    min-height: clamp(214px, 31vh, 260px);
+    padding-block: clamp(24px, 3.6vh, 34px);
+  }
+
+  body:has(#queryView.is-active) .query-location-row button {
+    height: clamp(46px, 7.1vh, 58px);
+  }
+
+  body:has(#queryView.is-active) .query-keyword-row {
+    height: clamp(62px, 9vh, 78px);
+    margin-top: clamp(18px, 3.1vh, 26px);
+  }
 }
 
 .detail-hero {
@@ -3868,18 +4363,25 @@ body {
   --query-sidebar-w: clamp(246px, 16.8vw, 322px);
 }
 
-.query-left-brand {
+.query-left-brand,
+body:has(#aiView.is-active) .ai-brand-real {
   left: clamp(18px, 1.35vw, 26px);
   gap: clamp(8px, 0.62vw, 12px);
 }
 
-.query-left-brand img {
+.query-left-brand img,
+body:has(#aiView.is-active) .ai-brand-real img {
   width: clamp(36px, 2.35vw, 45px);
   height: clamp(36px, 2.35vw, 45px);
 }
 
 .query-left-brand strong {
   max-width: calc(var(--query-sidebar-w) - 68px);
+  font-size: clamp(14px, 0.94vw, 18px);
+}
+
+body:has(#aiView.is-active) .ai-brand-real strong {
+  max-width: calc(var(--ai-sidebar-w) - 68px);
   font-size: clamp(14px, 0.94vw, 18px);
 }
 

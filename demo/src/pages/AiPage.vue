@@ -1,7 +1,9 @@
 <template>
-  <LegacyDomView view-id="aiView" />
+  <AiPageMarkup />
+  <AiPageController />
 </template>
 
 <script setup>
-import LegacyDomView from './LegacyDomView.vue'
+import AiPageController from './AiPageController.vue'
+import AiPageMarkup from './markup/AiPageMarkup.vue'
 </script>
