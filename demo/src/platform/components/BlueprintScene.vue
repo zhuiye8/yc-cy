@@ -543,7 +543,7 @@ onMounted(() => {
   // 自适应画质：根据屏幕 DPR + 物理分辨率自动选档，4K 客户机自动降级以保 60fps
   //   高档：1080p/2K + DPR≤1.5，全特效
   //   中档：2.5K 或 DPR 1.5-2，关 antialias + 关 bloom mipmap
-  //   低档：4K 或 DPR>2，关 antialias/bloom/outline，仅保留主渲染 + ShockWave
+  //   低档：4K 或 DPR>2，关 antialias/bloom/outline/shockwave，dprCap 压到 1.0（4K 原生分辨率）
   const quality = (() => {
     const dpr = window.devicePixelRatio || 1
     const maxSide = Math.max(
@@ -553,7 +553,7 @@ onMounted(() => {
       window.innerHeight || 0
     )
     if (dpr > 2 || maxSide >= 3840) {
-      return { tier: 'low',    dprCap: 1.25, antialias: false, bloom: false, bloomMipmap: false, outline: false, shockwave: true }
+      return { tier: 'low',    dprCap: 1.0,  antialias: false, bloom: false, bloomMipmap: false, outline: false, shockwave: false }
     }
     if (dpr > 1.5 || maxSide >= 2560) {
       return { tier: 'medium', dprCap: 1.5,  antialias: false, bloom: true,  bloomMipmap: false, outline: true,  shockwave: true }
@@ -2687,7 +2687,8 @@ onMounted(() => {
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     composer.setSize(width, height)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5))
+    // 必须沿用初始档位的 dprCap；之前固定写 2.5 会让 4K Retina 用户每次 resize 后被打回高 DPR 导致卡顿
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.dprCap))
     labelRenderer.setSize(width, height)
   }
 
