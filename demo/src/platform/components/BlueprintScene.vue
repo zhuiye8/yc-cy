@@ -97,7 +97,14 @@
       </div>
     </div>
 
-    <aside v-if="orgDrawer.visible" class="blueprint-org-drawer">
+    <!--
+      @click.stop：阻断抽屉内任何 click 冒泡到外层 .platform-overlay[data-target="chainView"]。
+      该 overlay 是 PlatformOverlay 给 BlueprintScene 套的 fixed 容器，带 data-target；main.js 的全局
+      [data-target] click 拦截器会把 chainView 翻译成 /chain 并 navigate，从而把当前 /chain/detail
+      改写回 /chain，触发 syncChainDetailRoute 关闭本抽屉。抽屉里所有交互（picker / 关闭 × / 分页）
+      都应通过自己的 @click 处理，不需要冒泡到 overlay，所以在抽屉根 stop 是最干净的隔离方式。
+    -->
+    <aside v-if="orgDrawer.visible" class="blueprint-org-drawer" @click.stop>
       <div class="blueprint-org-drawer-head">
         <div>
           <span>{{ orgDrawer.level || '产业链节点' }}</span>
@@ -111,16 +118,75 @@
         <small>点击球体或标签切换节点</small>
       </div>
       <div class="blueprint-org-filter-row">
-        <select v-model="orgDrawer.filters.province" :disabled="orgDrawer.loading" @change="onOrgProvinceChange">
-          <option value="">全国</option>
-          <option v-for="province in orgProvinceOptions" :key="province.code" :value="province.name">{{ province.name }}</option>
-        </select>
-        <select v-model="orgDrawer.filters.city" :disabled="orgDrawer.loading || !orgDrawer.filters.province" @change="onOrgCityChange">
-          <option value="">全部城市</option>
-          <option v-for="city in getOrgCityOptions(orgDrawer.filters.province)" :key="city.code" :value="city.name">{{ city.name }}</option>
-        </select>
+        <!-- 省份 picker：自定义暗色玻璃下拉，规避 fixed + backdrop-filter 父元素下 native select 闪关 quirk -->
+        <div class="blueprint-org-picker" ref="provincePickerRef">
+          <button
+            type="button"
+            class="blueprint-org-picker-trigger"
+            :disabled="orgDrawer.loading"
+            :aria-expanded="provincePickerOpen"
+            aria-haspopup="listbox"
+            @click="toggleProvincePicker"
+          >
+            <span :class="['blueprint-org-picker-text', { 'is-placeholder': !orgDrawer.filters.province }]">
+              {{ orgDrawer.filters.province || '全国' }}
+            </span>
+            <span class="blueprint-org-picker-caret" aria-hidden="true">▾</span>
+          </button>
+          <div v-if="provincePickerOpen" class="blueprint-org-picker-dropdown" role="listbox">
+            <button
+              type="button"
+              role="option"
+              :class="['blueprint-org-picker-item', { 'is-selected': !orgDrawer.filters.province }]"
+              @click="onPickProvince('')"
+            >全国</button>
+            <button
+              v-for="province in orgProvinceOptions"
+              :key="province.code"
+              type="button"
+              role="option"
+              :class="['blueprint-org-picker-item', { 'is-selected': orgDrawer.filters.province === province.name }]"
+              @click="onPickProvince(province.name)"
+            >{{ province.name }}</button>
+          </div>
+        </div>
+
+        <!-- 市级 picker -->
+        <div class="blueprint-org-picker" ref="cityPickerRef">
+          <button
+            type="button"
+            class="blueprint-org-picker-trigger"
+            :disabled="orgDrawer.loading || !orgDrawer.filters.province"
+            :aria-expanded="cityPickerOpen"
+            aria-haspopup="listbox"
+            @click="toggleCityPicker"
+          >
+            <span :class="['blueprint-org-picker-text', { 'is-placeholder': !orgDrawer.filters.city }]">
+              {{ orgDrawer.filters.city || '全部城市' }}
+            </span>
+            <span class="blueprint-org-picker-caret" aria-hidden="true">▾</span>
+          </button>
+          <div v-if="cityPickerOpen" class="blueprint-org-picker-dropdown is-align-right" role="listbox">
+            <button
+              type="button"
+              role="option"
+              :class="['blueprint-org-picker-item', { 'is-selected': !orgDrawer.filters.city }]"
+              @click="onPickCity('')"
+            >全部城市</button>
+            <button
+              v-for="city in cityOptionsForCurrentProvince"
+              :key="city.code"
+              type="button"
+              role="option"
+              :class="['blueprint-org-picker-item', { 'is-selected': orgDrawer.filters.city === city.name }]"
+              @click="onPickCity(city.name)"
+            >{{ city.name }}</button>
+          </div>
+        </div>
+
         <button
           type="button"
+          class="blueprint-org-reset"
           :disabled="orgDrawer.loading || (!orgDrawer.filters.province && !orgDrawer.filters.city)"
           @click="resetOrgRegionFilter"
         >重置</button>
@@ -239,6 +305,10 @@ const orgDrawer = reactive({
 function closeOrgDrawer() {
   orgDrawer.visible = false
   orgDrawer.error = ''
+  // 重置 picker 开关：BlueprintScene 在抽屉关闭后不会卸载，下次开抽屉时 v-if 仍会按 ref 渲染。
+  // 如果不重置，上次留下的 true 会让下拉一打开抽屉就默认展开。
+  provincePickerOpen.value = false
+  cityPickerOpen.value = false
 }
 
 async function loadOrgDrawer(chain, level = '', page = 1) {
@@ -253,6 +323,9 @@ async function loadOrgDrawer(chain, level = '', page = 1) {
   orgDrawer.chain = keyword
   orgDrawer.level = level
   orgDrawer.page = page
+  // 每次打开抽屉强制收起 picker，避免组件未卸载导致旧的 open 状态残留
+  provincePickerOpen.value = false
+  cityPickerOpen.value = false
 
   try {
     const data = await searchChainOrgs({
@@ -281,6 +354,36 @@ async function loadOrgDrawer(chain, level = '', page = 1) {
 function reloadOrgDrawerWithFilters() {
   if (!orgDrawer.chain) return
   loadOrgDrawer(orgDrawer.chain, orgDrawer.level, 1)
+}
+
+// 自定义省/市下拉的开关状态 + DOM 引用（外部点击关闭用）
+const provincePickerOpen = ref(false)
+const cityPickerOpen = ref(false)
+const provincePickerRef = ref(null)
+const cityPickerRef = ref(null)
+
+const cityOptionsForCurrentProvince = computed(() => getOrgCityOptions(orgDrawer.filters.province))
+
+function toggleProvincePicker() {
+  if (orgDrawer.loading) return
+  cityPickerOpen.value = false
+  provincePickerOpen.value = !provincePickerOpen.value
+}
+function toggleCityPicker() {
+  if (orgDrawer.loading || !orgDrawer.filters.province) return
+  provincePickerOpen.value = false
+  cityPickerOpen.value = !cityPickerOpen.value
+}
+function onPickProvince(name) {
+  orgDrawer.filters.province = name
+  orgDrawer.filters.city = ''
+  provincePickerOpen.value = false
+  reloadOrgDrawerWithFilters()
+}
+function onPickCity(name) {
+  orgDrawer.filters.city = name
+  cityPickerOpen.value = false
+  reloadOrgDrawerWithFilters()
 }
 
 function onOrgProvinceChange() {
@@ -484,15 +587,27 @@ function onChainPick(chain) {
 }
 
 function onChainPickerOutside(event) {
-  if (!chainPickerOpen.value) return
-  const root = chainPickerRoot.value
-  if (root && !root.contains(event.target)) closeChainPicker()
+  if (chainPickerOpen.value) {
+    const root = chainPickerRoot.value
+    if (root && !root.contains(event.target)) closeChainPicker()
+  }
+  if (provincePickerOpen.value) {
+    const root = provincePickerRef.value
+    if (root && !root.contains(event.target)) provincePickerOpen.value = false
+  }
+  if (cityPickerOpen.value) {
+    const root = cityPickerRef.value
+    if (root && !root.contains(event.target)) cityPickerOpen.value = false
+  }
 }
 
 function onChainPickerKeydown(event) {
-  if (event.key === 'Escape' && chainPickerOpen.value) {
-    closeChainPicker()
-  }
+  if (event.key !== 'Escape') return
+  if (!chainPickerOpen.value && !provincePickerOpen.value && !cityPickerOpen.value) return
+  event.stopPropagation()
+  closeChainPicker()
+  provincePickerOpen.value = false
+  cityPickerOpen.value = false
 }
 
 onMounted(() => {
@@ -3082,6 +3197,144 @@ onBeforeUnmount(() => cleanup())
 
 .blueprint-org-filter-row select:disabled,
 .blueprint-org-filter-row button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+/* ── 企业抽屉省/市自定义下拉（替代 native select，避免 fixed + backdrop-filter 父级下的闪关 quirk） */
+.blueprint-org-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.blueprint-org-picker-trigger {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(127, 193, 255, 0.24);
+  border-radius: 10px;
+  background-color: rgba(9, 25, 45, 0.78);
+  color: rgba(232, 245, 255, 0.9);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+.blueprint-org-picker-trigger:hover:not(:disabled),
+.blueprint-org-picker-trigger[aria-expanded='true'] {
+  border-color: rgba(127, 210, 255, 0.52);
+  background-color: rgba(13, 39, 68, 0.92);
+  box-shadow: 0 0 0 2px rgba(72, 186, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.blueprint-org-picker-trigger:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.blueprint-org-picker-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.blueprint-org-picker-text.is-placeholder {
+  color: rgba(180, 210, 240, 0.6);
+}
+
+.blueprint-org-picker-caret {
+  color: rgba(180, 210, 240, 0.75);
+  font-size: 11px;
+  transition: transform 0.18s ease;
+}
+.blueprint-org-picker-trigger[aria-expanded='true'] .blueprint-org-picker-caret {
+  transform: rotate(180deg);
+}
+
+.blueprint-org-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  /* 省份 picker（第一列）：左对齐 trigger，向右扩展。trigger 宽 ~178px，dropdown 至少 200px
+     → 多出来的 ~22px 会越过列边界覆盖到右侧 city 列，但抽屉总宽 460px 足够容纳，不会被
+     drawer overflow:hidden 横向裁剪。城市 picker 用下面 .is-align-right 改为右锚扩展。 */
+  left: 0;
+  right: auto;
+  min-width: 200px;
+  max-height: 280px;
+  overflow-y: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(133, 205, 255, 0.22);
+  background: rgba(8, 14, 26, 0.95);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(134, 228, 255, 0.45) transparent;
+}
+/* 城市 picker（第二列）：右对齐 trigger，向左扩展，避免溢出到抽屉右边被裁。 */
+.blueprint-org-picker-dropdown.is-align-right {
+  left: auto;
+  right: 0;
+}
+.blueprint-org-picker-dropdown::-webkit-scrollbar { width: 6px; }
+.blueprint-org-picker-dropdown::-webkit-scrollbar-track { background: transparent; }
+.blueprint-org-picker-dropdown::-webkit-scrollbar-thumb {
+  background: rgba(134, 228, 255, 0.32);
+  border-radius: 3px;
+}
+.blueprint-org-picker-dropdown::-webkit-scrollbar-thumb:hover { background: rgba(134, 228, 255, 0.55); }
+
+.blueprint-org-picker-item {
+  display: block;
+  width: 100%;
+  padding: 13px 18px;
+  border: 0;
+  background: transparent;
+  color: rgba(232, 244, 255, 0.92);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(133, 205, 255, 0.12);
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.blueprint-org-picker-item:last-child { border-bottom: 0; }
+.blueprint-org-picker-item:hover {
+  background: rgba(31, 78, 216, 0.22);
+  color: #ffffff;
+}
+.blueprint-org-picker-item.is-selected {
+  background: rgba(31, 78, 216, 0.35);
+  color: #ffffff;
+}
+
+/* 保留原 .blueprint-org-filter-row button 的样式用于重置按钮，但单独覆盖以防新 picker trigger 也被命中 */
+.blueprint-org-filter-row .blueprint-org-reset {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(127, 193, 255, 0.24);
+  border-radius: 10px;
+  background: rgba(14, 43, 77, 0.68);
+  color: rgba(232, 245, 255, 0.9);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+.blueprint-org-filter-row .blueprint-org-reset:hover:not(:disabled) {
+  border-color: rgba(127, 210, 255, 0.52);
+  background-color: rgba(13, 39, 68, 0.92);
+}
+.blueprint-org-filter-row .blueprint-org-reset:disabled {
   opacity: 0.42;
   cursor: not-allowed;
 }

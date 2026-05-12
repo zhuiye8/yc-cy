@@ -4038,6 +4038,8 @@ body:has(#aiView.is-active) .ai-hero-real p {
 }
 
 body:has(#aiView.is-active) .ai-chat-real {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   height: 100%;
   overflow-y: auto;
@@ -4150,13 +4152,17 @@ body:has(#aiView.is-active) .ai-composer-real {
   width: auto;
   height: auto;
   min-height: 74px;
-  margin: clamp(18px, 1.5vw, 26px) 0 0 clamp(66px, 4.9vw, 92px);
+  margin: auto 0 0 clamp(66px, 4.9vw, 92px);
   padding: 12px 74px 12px 18px;
   border: 1px solid rgba(79, 128, 194, 0.18);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 -10px 26px rgba(72, 107, 160, 0.12);
   backdrop-filter: blur(12px);
+}
+
+body:has(#aiView.is-active) .ai-answer-greeting {
+  flex-shrink: 0;
 }
 
 body:has(#aiView.is-active) .ai-composer-real input {

@@ -16,7 +16,39 @@
 .title-metric span { display: block; font-size: 10px; color: #8fbdf0; letter-spacing: 0.08em; }
 .title-metric strong { display: block; margin-top: 3px; font-size: 18px; color: #eff8ff; }
 .live-dot { width: 10px; height: 10px; border-radius: 50%; background: #54f3d2; box-shadow: 0 0 12px #54f3d2; }
-.hero-panel { top: 96px; left: 18px; width: min(560px, calc(100vw - 420px)); border-radius: 18px; padding: 10px 12px; display: block; pointer-events: none; transition: opacity 0.45s ease, transform 0.45s ease; }
+/* 左侧 panel 群：flex column wrapper（hero/筛选/省级/城市快捷自然堆叠，最末位 panel 自动占用剩余高度 + 滚动） */
+/* top: 紧贴顶部 top-brand 底部（top-brand top:18 + 自身高约 84 → 底部 ~102，留 ~6px gap 即 96。
+   再上移以贴更紧 → 86） */
+.left-rail {
+  position: absolute;
+  top: 10px;
+  left: 18px;
+  bottom: 92px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 10;
+  pointer-events: none;
+}
+.left-rail > .hud {
+  position: static;
+  top: auto;
+  left: auto;
+  bottom: auto;
+  width: 100%;
+  max-height: none;
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+.left-rail > .province-panel,
+.left-rail > .city-quick-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.hero-panel { width: 100%; border-radius: 18px; padding: 10px 12px; display: block; transition: opacity 0.45s ease, transform 0.45s ease; }
 .hero-copy { pointer-events: auto; }
 .hero-copy h2 { margin: 0 0 6px; font-size: 22px; line-height: 1.15; }
 .hero-copy p:last-of-type { margin: 0; max-width: 520px; font-size: 12px; line-height: 1.4; color: #a9cbf3; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
@@ -35,8 +67,23 @@
 .trend-col { display: grid; justify-items: center; gap: 6px; }
 .trend-track { width: 16px; height: 46px; border-radius: 999px; background: rgba(197, 222, 255, 0.08); display: flex; align-items: end; overflow: hidden; }
 .trend-fill { width: 100%; border-radius: 999px; background: linear-gradient(180deg, #85f1ff, #4c79ff); box-shadow: 0 0 14px rgba(86, 167, 255, 0.35); transition: height 0.45s ease; }
-.province-panel { left: 18px; top: 292px; width: 228px; border-radius: 16px; padding: 10px 12px; pointer-events: none; transition: opacity 0.45s ease, transform 0.45s ease; }
-.city-quick-panel { left: 18px; top: 292px; width: 268px; border-radius: 18px; padding: 12px; pointer-events: auto; transition: opacity 0.45s ease, transform 0.45s ease; }
+/* 省级菜单 / 城市快捷入口：left-rail 内 flex:1 + 内部滚动，确保任何分辨率不溢出 */
+.province-panel,
+.city-quick-panel {
+  border-radius: 16px;
+  padding: 10px 12px 12px;
+  transition: opacity 0.45s ease, transform 0.45s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(134, 228, 255, 0.4) transparent;
+}
+.province-panel::-webkit-scrollbar,
+.city-quick-panel::-webkit-scrollbar { width: 6px; }
+.province-panel::-webkit-scrollbar-track,
+.city-quick-panel::-webkit-scrollbar-track { background: transparent; }
+.province-panel::-webkit-scrollbar-thumb,
+.city-quick-panel::-webkit-scrollbar-thumb { background: rgba(134, 228, 255, 0.32); border-radius: 3px; }
+.province-panel::-webkit-scrollbar-thumb:hover,
+.city-quick-panel::-webkit-scrollbar-thumb:hover { background: rgba(134, 228, 255, 0.55); }
 .city-quick-grid { margin-top: 10px; display: grid; grid-template-columns: 1fr; gap: 8px; }
 .city-quick-card { width: 100%; text-align: left; border: 1px solid rgba(128, 199, 255, 0.12); background: linear-gradient(180deg, rgba(19, 37, 77, 0.82), rgba(10, 22, 48, 0.88)); border-radius: 14px; padding: 12px; color: #dff2ff; cursor: pointer; transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease; }
 .city-quick-card:hover { transform: translateX(4px); border-color: color-mix(in srgb, var(--quick-color) 55%, rgba(128, 199, 255, 0.12)); box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18); }
@@ -44,7 +91,8 @@
 .city-quick-card strong { display: block; font-size: 15px; line-height: 1.35; color: #eef9ff; }
 .city-quick-card p { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: #9fc5ec; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .city-quick-link { display: inline-block; margin-top: 10px; font-size: 11px; color: var(--quick-color); letter-spacing: 0.04em; }
-.province-menu-grid { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.province-menu-grid { margin-top: 8px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.province-menu-grid button { padding: 7px 8px; font-size: 12px; line-height: 1.2; text-align: center; }
 .province-tip { display: none; }
 .detail-top { display: flex; align-items: center; justify-content: space-between; }
 .type-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 58px; padding: 6px 10px; border-radius: 999px; background: rgba(77, 136, 220, 0.24); color: #d8f6ff; font-size: 12px; }
@@ -216,14 +264,26 @@
 .close-btn { border: 1px solid rgba(123, 192, 255, 0.14); background: rgba(70, 104, 167, 0.22); color: #d4ebff; border-radius: 999px; padding: 6px 10px; cursor: pointer; }
 @media (max-width: 1380px) {
   .detail-page { left: 18px; width: auto; }
-  .hero-panel { width: auto; right: 18px; grid-template-columns: 1fr; }
-  .province-panel { top: 300px; width: 210px; }
-  .city-quick-panel { top: 300px; width: 230px; }
+  .left-rail { width: 280px; }
   .node-detail-panel { width: calc(100vw - 36px); bottom: 78px; }
+}
+
+/* 窄高屏：进一步压缩 hero 内部 padding 让左侧 panel 群有更多垂直空间 */
+@media (max-height: 820px) {
+  .left-rail { top: 84px; bottom: 86px; gap: 8px; }
+  .hero-panel { padding: 8px 12px; }
+  .hero-copy h2 { font-size: 18px; }
+}
+@media (max-height: 700px) {
+  .left-rail { top: 76px; bottom: 80px; gap: 6px; }
+  .hero-panel { padding: 6px 10px; }
+  .hero-copy h2 { font-size: 16px; }
+  .footer-bar { padding: 8px 12px; }
 }
 .screen-root.detail-mode .top-brand { opacity: 0.62; transform: translateY(-3px); transition: opacity 0.7s ease, transform 0.7s ease; }
 .screen-root.detail-mode .screen-canvas { cursor: default; }
 .screen-root.detail-mode .hero-panel,
+.screen-root.detail-mode .filter-sector-panel,
 .screen-root.detail-mode .province-panel,
 .screen-root.detail-mode .city-quick-panel { opacity: 0; transform: translateX(-32px); pointer-events: none; }
 .screen-root.detail-mode .resource-stats-panel { opacity: 0; transform: translateX(32px); pointer-events: none; }
@@ -553,5 +613,48 @@
   font-size: 13px;
   font-weight: 700;
   border-radius: 18px;
+}
+
+/* ── 板块筛选 panel（选省/选市时常驻；chip 列表） ─────────── */
+.filter-sector-panel {
+  padding: 10px 14px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(91, 139, 205, 0.32);
+  background: rgba(9, 24, 50, 0.78);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+.filter-sector-head { margin-bottom: 8px; }
+.filter-sector-eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  color: #a9c7f5;
+}
+.filter-sector-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filter-sector-chip {
+  border: 1px solid rgba(128, 199, 255, 0.18);
+  background: rgba(46, 82, 148, 0.24);
+  color: #cfe3fb;
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.filter-sector-chip:hover {
+  border-color: rgba(126, 198, 255, 0.42);
+  color: #eaf5ff;
+}
+.filter-sector-chip.active {
+  background: linear-gradient(90deg, rgba(63, 111, 255, 0.92), rgba(67, 224, 255, 0.78));
+  border-color: rgba(126, 198, 255, 0.55);
+  color: #08111f;
+  font-weight: 700;
+  box-shadow: 0 0 18px rgba(84, 173, 255, 0.28);
 }
 

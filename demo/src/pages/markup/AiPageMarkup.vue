@@ -50,31 +50,12 @@
               <p>有什么可以帮你的吗？</p>
             </section>
             <section class="ai-chat-real">
-              <div class="ai-user-msg">
-                <p>设计一个更好看的蓝色系的网页 gpt 的 chat 界面</p>
-                <time>14:30</time>
-                <span>✓</span>
-              </div>
-              <article class="ai-answer">
-                <img src="../../../assets/extracted/ai_logo.png" alt="" />
+              <article class="ai-answer ai-answer-greeting">
+                <img src="../../../assets/extracted/ai_logo.png" alt="AI助手" />
                 <div>
-                  <p>好的，以下是一个更好看的蓝色系网页 GPT Chat 界面设计方案，包含整体风格、布局结构与主要功能模块：</p>
-                  <hr />
-                  <h2>1. 设计风格</h2>
-                  <ul>
-                    <li><b>主色调：</b>以浅蓝、深蓝、冰蓝为主，搭配白色和浅灰，营造清新、科技感的氛围。</li>
-                    <li><b>视觉特点：</b>玻璃拟态（Glassmorphism）、柔和阴影、圆角设计，提升层次感与现代感。</li>
-                    <li><b>字体：</b>简洁易读的无衬线字体，提升可读性。</li>
-                  </ul>
-                  <h2>2. 布局结构</h2>
-                  <div class="ai-preview-card"></div>
+                  <p>你好，我是武汉数据智能研究院的智能助手，可以帮你梳理产业情报、分析技术趋势、生成结构化报告。请问今天想了解什么？</p>
                 </div>
               </article>
-              <div class="ai-suggestions">
-                <button>帮我优化一下布局</button>
-                <button>生成可交互原型</button>
-                <button>再补充一些配色方案</button>
-              </div>
               <footer class="ai-composer-real">
                 <input placeholder="发送消息..." />
                 <div>

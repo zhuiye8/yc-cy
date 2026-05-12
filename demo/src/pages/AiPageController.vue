@@ -54,16 +54,6 @@ function bindAiEvents() {
     showToast('已新建会话')
   })
 
-  aiView.querySelectorAll('.ai-suggestions button').forEach((button) => {
-    addListener(button, 'click', () => {
-      const input = aiView.querySelector('.ai-composer-real input')
-      if (input) {
-        input.value = button.textContent.trim()
-        input.focus()
-      }
-    })
-  })
-
   addListener(aiView.querySelector('.ai-send-real'), 'click', () => {
     const input = aiView.querySelector('.ai-composer-real input')
     if (input && input.value.trim()) {

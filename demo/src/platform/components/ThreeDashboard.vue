@@ -24,56 +24,75 @@
       </div>
     </section>
 
-    <!-- Hero panel -->
-    <section ref="heroPanelRef" class="hud hero-panel glass-card hero-panel--simple">
-      <div class="hero-copy">
-        <p class="eyebrow">产业智能情报 / 沉浸式地图</p>
-        <h1 class="hero-h1">产业智能情报 3D 指挥屏</h1>
-        <h2>{{ heroTitle }}</h2>
-        <div class="filter-row">
-          <button
-            v-for="filter in FILTERS" :key="filter"
-            :class="['filter-pill', { active: activeCategory === filter }]"
-            @click="activeCategory = filter"
-          >{{ CATEGORY_STYLES[filter].label }}</button>
+    <!-- 左侧 panel 群：flex column wrapper，自然堆叠 + 末位 panel 占用剩余空间并滚动，
+         保证任何分辨率下底部都不会溢出 footer -->
+    <div class="left-rail">
+      <!-- Hero panel -->
+      <section ref="heroPanelRef" class="hud hero-panel glass-card hero-panel--simple">
+        <div class="hero-copy">
+          <p class="eyebrow">产业智能情报 / 沉浸式地图</p>
+          <h1 class="hero-h1">产业智能情报 3D 指挥屏</h1>
+          <h2>{{ heroTitle }}</h2>
+          <div class="filter-row">
+            <button
+              v-for="filter in FILTERS" :key="filter"
+              :class="['filter-pill', { active: activeCategory === filter }]"
+              @click="activeCategory = filter"
+            >{{ CATEGORY_STYLES[filter].label }}</button>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- Province panel -->
-    <section v-if="selectedProvince && !selectedCity" class="hud province-panel glass-card">
-      <div class="section-head compact">
-        <span>省级菜单</span>
-        <strong>{{ selectedProvince.name }}</strong>
-      </div>
-      <div class="province-menu-grid">
-        <button v-for="item in provinceMenuItems" :key="item.adcode" @click="onSelectCityFromMenu(item)">
-          {{ item.name }}
-        </button>
-      </div>
-      <p class="province-tip">{{ PROVINCE_PANEL_COPY }}</p>
-    </section>
+      <!-- 板块筛选（选省或选市时常驻）：chip 列表 -->
+      <section v-if="selectedProvince || selectedCity" class="hud filter-sector-panel glass-card">
+        <div class="filter-sector-head">
+          <span class="filter-sector-eyebrow">板块筛选</span>
+        </div>
+        <div class="filter-sector-chips">
+          <button
+            v-for="opt in DEMO_SECTOR_OPTIONS"
+            :key="opt"
+            :class="['filter-sector-chip', { active: demoSector === opt }]"
+            @click="demoSector = opt"
+          >{{ opt }}</button>
+        </div>
+      </section>
 
-    <!-- City quick-entry panel -->
-    <section v-if="selectedCity && spaceTrendCityQuickEntries.length" class="hud city-quick-panel glass-card">
-      <div class="section-head compact">
-        <span>{{ CATEGORY_STYLES[activeCategory].label }}快捷入口</span>
-        <strong>{{ selectedCity.name }}</strong>
-      </div>
-      <div class="city-quick-grid">
-        <button
-          v-for="item in spaceTrendCityQuickEntries" :key="item.id"
-          class="city-quick-card"
-          :style="{ '--quick-color': CHART_CAT_COLORS[activeCategory] }"
-          @click="onOpenQuickEntry(item)"
-        >
-          <span class="city-quick-type">{{ CATEGORY_STYLES[activeCategory].label }}</span>
-          <strong :title="item.title">{{ item.name }}</strong>
-          <p :title="item.title">{{ item.title }}</p>
-          <span class="city-quick-link">进入详情</span>
-        </button>
-      </div>
-    </section>
+      <!-- Province panel -->
+      <section v-if="selectedProvince && !selectedCity" class="hud province-panel glass-card">
+        <div class="section-head compact">
+          <span>省级菜单</span>
+          <strong>{{ selectedProvince.name }}</strong>
+        </div>
+        <div class="province-menu-grid">
+          <button v-for="item in provinceMenuItems" :key="item.adcode" @click="onSelectCityFromMenu(item)">
+            {{ item.name }}
+          </button>
+        </div>
+        <p class="province-tip">{{ PROVINCE_PANEL_COPY }}</p>
+      </section>
+
+      <!-- City quick-entry panel -->
+      <section v-if="selectedCity && spaceTrendCityQuickEntries.length" class="hud city-quick-panel glass-card">
+        <div class="section-head compact">
+          <span>{{ CATEGORY_STYLES[activeCategory].label }}快捷入口</span>
+          <strong>{{ selectedCity.name }}</strong>
+        </div>
+        <div class="city-quick-grid">
+          <button
+            v-for="item in spaceTrendCityQuickEntries" :key="item.id"
+            class="city-quick-card"
+            :style="{ '--quick-color': CHART_CAT_COLORS[activeCategory] }"
+            @click="onOpenQuickEntry(item)"
+          >
+            <span class="city-quick-type">{{ CATEGORY_STYLES[activeCategory].label }}</span>
+            <strong :title="item.title">{{ item.name }}</strong>
+            <p :title="item.title">{{ item.title }}</p>
+            <span class="city-quick-link">进入详情</span>
+          </button>
+        </div>
+      </section>
+    </div>
 
     <!-- Resource stats panel (右侧"科创资源地图"，详情模式下自动隐藏) -->
     <section class="hud resource-stats-panel glass-card">
@@ -226,10 +245,18 @@ const topMetricsRef = ref(null)
 const heroPanelRef  = ref(null)
 const footerBarRef  = ref(null)
 
+// ── Demo filter constants (假数据，仅用于左侧筛选演示 / GICS 11 板块 + 全部) ─────
+const DEMO_SECTOR_OPTIONS = [
+  '全部',
+  '能源', '材料', '工业', '非必需消费品', '必需消费品',
+  '医疗保健', '金融', '信息技术', '通信服务', '公用事业', '房地产',
+]
+
 // ── Reactive state ────────────────────────────────────────────────────────────
 const selectedProvince     = ref(null)
 const selectedCity         = ref(null)
 const activeCategory       = ref('Talent')
+const demoSector           = ref('全部')
 const selectedParticleData = ref(null)
 const particleCount        = ref(0)
 const introInteractive     = ref(false)
