@@ -27,19 +27,19 @@ const roleMeta = {
 const templateMeta = {
   chainGap: {
     label: '产业链短板诊断',
-    prompt: '请基于产业链节点库、产业链企业检索、产业链企业省市分布和人才区域聚合，分析指定产业链在指定区域的优势、短板、关键节点、代表企业和招商补链方向；没有接口证据的部分只给待检索清单，不下确定结论。',
+    prompt: '围绕指定产业链在指定区域的优势、短板、关键节点、代表企业和招商补链方向给出分析。',
   },
   companyDiligence: {
     label: '企业科技能力尽调',
-    prompt: '请基于产业链企业检索、产业链节点库、人才检索和基于人才ID的论文/专利产出，评估目标企业或候选企业的科技能力；当前只能引用企业基本信息、地区、标签、专利/论文/成果数量等接口返回字段，不做侵权或财务结论。',
+    prompt: '围绕目标企业或候选企业的科技能力、专利质量、合作机构和技术方向给出分析。',
   },
   literatureReview: {
     label: '文献综述框架',
-    prompt: '请围绕指定技术方向生成文献/专利综述的检索框架；当前可用数据主要是人才检索以及基于人才ID的论文/专利产出，不承诺区域论文全文检索、高被引排序、期刊投稿推荐或全文语义检索。',
+    prompt: '围绕指定技术方向给出文献/专利综述的研究脉络、代表方法和热点趋势分析。',
   },
   investmentList: {
     label: '招商补链清单',
-    prompt: '请基于产业链节点库、产业链企业检索、产业链企业省市分布和人才区域聚合，生成招商补链候选方向、目标企业类型、筛选标准和落地建议；企业名单必须来自检索结果或明确标记为待检索。',
+    prompt: '围绕指定产业链、指定承接区域，给出招商补链方向、目标企业类型、筛选标准和落地建议。',
   },
 }
 
@@ -205,20 +205,14 @@ function enhancedPrompt(question, intent = null) {
   const roleInfo = activeRole()
   const templateInfo = activeTemplate()
   const entities = intent?.entities || {}
-  const missing = Array.isArray(intent?.missingSlots) ? intent.missingSlots.join('、') : ''
 
   return [
     `角色：${roleInfo.label}`,
     `任务：${templateInfo.label}`,
     `原始问题：${question}`,
-    `角色要求：${roleInfo.instruction}`,
     entities.industryRaw ? `识别产业链：${entities.industryRaw}` : '',
     entities.regionRaw ? `识别区域：${entities.regionRaw}` : '',
     entities.companyRaw ? `识别企业：${entities.companyRaw}` : '',
-    missing ? `待补充信息：${missing}` : '',
-    '可用数据能力：产业链节点库、产业链企业检索接口、产业链企业省市分布、人才区域聚合、人才检索、基于人才ID的论文/专利产出。',
-    '不可承诺能力：区域论文全文检索、区域专利全文检索、政策全文检索、标准全文检索、基金项目全文检索、期刊投稿推荐、专利侵权判定、财务尽调结论。',
-    '输出要求：先给结论，再说明依据；每条判断都尽量绑定数据来源编号；没有真实检索结果时不得编造精确统计。',
   ].filter(Boolean).join('\n')
 }
 
@@ -240,9 +234,23 @@ function createSourceTags(sources = fallbackSources) {
 }
 
 function normalizeCitationText(text) {
-  return String(text || '')
-    .replace(/\[S(\d+)\]/gi, '[$1]')
-    .replace(/\(S(\d+)\)/gi, '[$1]')
+  let s = String(text || '')
+
+  // 1) 括号内 "来源" / "source" 引导词去掉，只保留 S 编号待下一阶段处理
+  s = s.replace(/([\[（(])\s*(?:来源|source)\b\s*/gi, '$1')
+
+  // 2) 括号包裹的单个或多个 S 编号 → [N] 或 [N1][N2]
+  s = s.replace(/[\[（(]\s*((?:[Ss]\s*\d+\s*[,，、\s]*)+)\s*[\])）]/g, (_, group) => (
+    (group.match(/\d+/g) || []).map((n) => `[${n}]`).join('')
+  ))
+
+  // 3) 裸文本 "来源S1" / "source S1"
+  s = s.replace(/(?:来源|source)\b\s*[Ss]\s*(\d+)/gi, '[$1]')
+
+  // 4) 孤立的 "S1"（前后是非字母数字边界）
+  s = s.replace(/(^|[^A-Za-z0-9\[（(])[Ss](\d+)(?=$|[^A-Za-z0-9])/g, '$1[$2]')
+
+  return s
 }
 
 function insertBeforeComposer(node) {
@@ -315,10 +323,30 @@ function buildFallbackBullets(intent = null) {
   const industry = entities.industryRaw || '目标产业链'
   const region = entities.regionRaw || '目标区域'
   return [
-    `系统已识别分析对象为“${industry}”，后续应优先检索产业链节点、企业分布和专利主题。`,
-    `涉及区域判断时，应把“${region}”与全国、省、市、区县聚合数据同时对照，避免只看单一指标。`,
-    '当前回答必须优先使用已发布真实接口；未部署能力只能说明缺口，不能编造精确统计。',
+    `分析对象初步识别为"${industry}"，可从产业链节点、企业分布、专利主题三条线索切入。`,
+    `区域维度建议把"${region}"放在全国、省、市、区县的多层聚合下对比，避免单一指标判断。`,
+    '提供更具体的产业链节点或企业关键词，可显著提升分析颗粒度。',
   ]
+}
+
+function sparseRetrievalReply(intent = null) {
+  const entities = intent?.entities || {}
+  const hints = []
+  if (!entities.industryRaw) hints.push('补充具体的产业链名称，例如"低空经济产业链"、"半导体材料"。')
+  if (!entities.regionRaw) hints.push('补充关注的地区，例如"全国"、"湖北省"、"武汉市"。')
+  if (!entities.topicRaw && !entities.companyRaw) hints.push('补充研究主题或企业名称，例如"机器视觉缺陷检测"、"宁德时代"。')
+  return {
+    title: '请补充更多分析对象',
+    summary: '当前问题里没有匹配到可用的检索线索，无法启动产业链、企业或人才数据查询。补充以下任一信息后重新提问，系统会基于研究院数据库给出带依据的分析。',
+    bullets: hints.length ? hints : [
+      '补充具体的产业链名称。',
+      '补充关注的地区。',
+      '补充研究主题或企业名称。',
+    ],
+    caveat: '补全后再发送，结果会优先引用真实检索数据。',
+    hideSources: true,
+    hidePrompt: true,
+  }
 }
 
 function describeRetrievalTool(tool) {
@@ -412,10 +440,7 @@ function renderAssistantResult(article, data, prompt, intent, isFallback = false
 
   const body = document.createElement('div')
   const title = document.createElement('h2')
-  title.textContent = data?.title || '已整理成可检索的分析任务'
-
-  const pre = document.createElement('pre')
-  pre.textContent = data?.hidePrompt ? '' : (data?.enhancedPrompt || prompt)
+  title.textContent = data?.title || '分析结果'
 
   const resultTitle = document.createElement('h2')
   resultTitle.textContent = isFallback ? '本地兜底分析结果' : '分析结果'
@@ -433,9 +458,7 @@ function renderAssistantResult(article, data, prompt, intent, isFallback = false
     list.appendChild(item)
   })
 
-  body.append(title)
-  if (pre.textContent) body.appendChild(pre)
-  body.append(resultTitle, summary, list)
+  body.append(title, resultTitle, summary, list)
   if (data?.caveat) {
     const caveat = document.createElement('p')
     caveat.textContent = normalizeCitationText(data.caveat)
@@ -459,9 +482,7 @@ function composeGuidedPrompt(templateKey, values) {
 
   return [
     templateInfo.prompt,
-    fieldText ? `\n用户已补全信息：\n${fieldText}` : '',
-    '能力边界：只能围绕产业链节点、产业链企业检索、产业链企业省市分布、人才区域聚合、人才检索、基于人才ID的论文/专利产出这些已发布接口作答；不要引导用户要求区域论文全文检索、区域专利全文检索、政策全文检索、标准全文检索、基金项目全文库、期刊投稿推荐、专利侵权判定或财务尽调结论。',
-    '请先检查信息是否足够；如果缺少产业链、企业、区域或研究主题等关键对象，请先追问，不要直接编造结论。',
+    fieldText ? `\n关键条件：\n${fieldText}` : '',
   ].filter(Boolean).join('\n')
 }
 
@@ -609,6 +630,44 @@ function cleanText(text) {
     .trim()
 }
 
+function extractAnswerMarkdown(article) {
+  const div = article.querySelector(':scope > div')
+  if (!div) return cleanText(article.textContent)
+
+  const out = []
+  Array.from(div.children).forEach((child) => {
+    const tag = child.tagName
+    const text = cleanText(child.textContent || '')
+    if (!text) return
+
+    if (tag === 'H2') {
+      out.push(`### ${text}`, '')
+    } else if (tag === 'P') {
+      out.push(text, '')
+    } else if (tag === 'OL') {
+      Array.from(child.querySelectorAll(':scope > li')).forEach((li, i) => {
+        out.push(`${i + 1}. ${cleanText(li.textContent)}`)
+      })
+      out.push('')
+    } else if (tag === 'SECTION' && child.classList.contains('ai-retrieval-panel')) {
+      const items = Array.from(child.querySelectorAll('li')).map((li) => cleanText(li.textContent))
+      if (items.length) {
+        out.push('**引用数据**')
+        items.forEach((item) => out.push(`- ${item}`))
+        out.push('')
+      }
+    } else if (tag === 'DIV' && child.classList.contains('ai-source-inline')) {
+      const tags = Array.from(child.querySelectorAll('span')).map((s) => cleanText(s.textContent))
+      if (tags.length) {
+        out.push('**数据来源**')
+        tags.forEach((t) => out.push(`- ${t}`))
+        out.push('')
+      }
+    }
+  })
+  return out.join('\n').trim()
+}
+
 function collectConversationMarkdown() {
   const lines = [
     '# AI 分析对话导出',
@@ -620,7 +679,7 @@ function collectConversationMarkdown() {
     '',
   ]
 
-  const messages = Array.from(aiView.querySelectorAll('.ai-user-msg, .ai-answer-result, .ai-template-hint'))
+  const messages = Array.from(aiView.querySelectorAll('.ai-user-msg, .ai-answer-result'))
   if (!messages.length) {
     lines.push('> 当前还没有新的对话消息。')
     return lines.join('\n')
@@ -629,10 +688,14 @@ function collectConversationMarkdown() {
   messages.forEach((message, index) => {
     const isUser = message.classList.contains('ai-user-msg')
     const role = isUser ? '用户' : 'AI'
-    const content = cleanText(message.textContent)
     lines.push(`## ${index + 1}. ${role}`)
     lines.push('')
-    lines.push(content || '(空)')
+    if (isUser) {
+      const p = cleanText(message.querySelector('p')?.textContent || '')
+      lines.push(p || '(空)')
+    } else {
+      lines.push(extractAnswerMarkdown(message) || '(空)')
+    }
     lines.push('')
   })
 
@@ -687,6 +750,13 @@ async function submitPrompt(questionOverride = '') {
       intent,
       template: activeTemplateKey(),
     })
+
+    const usefulTools = (retrieval?.tools || []).filter((tool) => tool.ok && tool.data)
+    if (!usefulTools.length) {
+      renderAssistantResult(loadingArticle, sparseRetrievalReply(intent), '', intent, false, retrieval)
+      return
+    }
+
     const data = await generateAiAnalysis({
       question,
       prompt,
@@ -699,12 +769,12 @@ async function submitPrompt(questionOverride = '') {
   } catch (error) {
     const prompt = enhancedPrompt(question, intent)
     renderAssistantResult(loadingArticle, {
-      title: '已整理成可检索的分析任务',
-      enhancedPrompt: prompt,
-      summary: '真实模型接口暂不可用，页面已使用本地兜底结果，客户侧不会看到错误信息。',
+      title: '分析任务',
+      summary: '真实模型暂时不可用，已基于已识别要点给出框架性分析。',
       bullets: buildFallbackBullets(intent),
       sources: fallbackSources,
-      caveat: '代码中保留兜底逻辑，后续接口稳定后会优先展示真实模型结果。',
+      caveat: '稍后重试可获得更完整的分析结果。',
+      hidePrompt: true,
     }, prompt, intent, true, retrieval)
     console.warn('[AI] DeepSeek request failed, fallback rendered.', error)
   }
