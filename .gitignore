@@ -8,6 +8,14 @@ demo/dist/
 *.log
 demo/server.*.log
 
+# local secrets
+.env
+.env.local
+.env.*.local
+demo/.env
+demo/.env.local
+demo/.env.*.local
+
 # source design files from client prototypes
 首页二级页/
 *.psd

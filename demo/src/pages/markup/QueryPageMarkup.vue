@@ -39,7 +39,7 @@
               </button>
               <button class="query-side-item" data-query-type="journal">
                 <img src="../../../assets/extracted/query_icon_library.png" alt="" />
-                <span>期刊</span>
+                <span>文献</span>
               </button>
             </nav>
           </aside>
@@ -150,7 +150,7 @@
                 <section class="detail-card map-card"><h2>区域关联</h2><div class="map-layout compact"><div class="mini-map"><span></span></div><p>湖北省 / 武汉市 / 东湖高新区<br>高新大道188号</p></div></section>
               </div>
 
-              <section class="detail-card related-card"><h2>相关成果与延伸阅读</h2><div class="related-list"><article><b>企业</b><h3>武汉智眸感知科技有限公司</h3><p>专注于工业视觉与智能感知设备研发。</p></article><article><b>论文</b><h3>工业视觉检测中自适应神经学习方法研究</h3><p>期刊：计算机应用研究 2023</p></article><article><b>项目</b><h3>智能装备视觉感知核心技术研发与应用示范</h3><p>国家重点研发计划项目，2023-2025</p></article><article><b>政策 / 报告</b><h3>智能制造产业专利导航分析报告（2024）</h3><p>湖北知识产权研究中心发布</p></article></div></section>
+              <section class="detail-card related-card"><h2>相关成果与延伸阅读</h2><div class="related-list"><article><b>企业</b><h3>武汉智眸感知科技有限公司</h3><p>专注于工业视觉与智能感知设备研发。</p></article><article><b>论文</b><h3>工业视觉检测中自适应神经学习方法研究</h3><p>文献：计算机应用研究 2023</p></article><article><b>项目</b><h3>智能装备视觉感知核心技术研发与应用示范</h3><p>国家重点研发计划项目，2023-2025</p></article><article><b>政策 / 报告</b><h3>智能制造产业专利导航分析报告（2024）</h3><p>湖北知识产权研究中心发布</p></article></div></section>
             </section>
             <section class="query-detail-page" data-query-panel="talent" aria-label="人才详情">
               <section class="talent-profile-hero">
@@ -205,10 +205,10 @@
                 <section class="detail-card talent-card icon-network"><h2>区域关联（合作/研究分布）</h2><div class="region-panel"><div class="china-map"></div><ul><li>湖北省（武汉市）<strong>42%</strong></li><li>广东省（深圳市）<strong>18%</strong></li><li>江苏省（南京市）<strong>12%</strong></li><li>上海市<strong>10%</strong></li><li>北京市<strong>8%</strong></li><li>其他<strong>10%</strong></li></ul></div></section>
               </div>
 
-              <section class="detail-card talent-card icon-network"><h2>代表成果与延伸阅读</h2><div class="related-list talent-related"><article><b>论文</b><h3>一种面向复杂背景的工业缺陷检测方法</h3><p>发表期刊：IEEE T-IND INFORMAT.</p><small>发表时间：2024-03-15　被引次数：126</small></article><article><b>专利</b><h3>一种基于深度学习的表面缺陷检测方法及装置</h3><p>专利号：ZL202110123456.7</p><small>授权时间：2022-08-10　专利类型：发明专利</small></article><article><b>技术成果</b><h3>工业视觉缺陷检测系统 V2.0</h3><p>成果类型：软件著作权</p><small>登记号：2023SR1234567　登记时间：2023-06-20</small></article><article><b>图书 / 文章</b><h3>智能视觉检测技术在消费电子领域的应用研究报告</h3><p>发布时间：2023-12-01</p><small>发布单位：武汉智能感知科技有限公司</small></article></div></section>
+              <section class="detail-card talent-card icon-network"><h2>代表成果与延伸阅读</h2><div class="related-list talent-related"><article><b>论文</b><h3>一种面向复杂背景的工业缺陷检测方法</h3><p>发表文献：IEEE T-IND INFORMAT.</p><small>发表时间：2024-03-15　被引次数：126</small></article><article><b>专利</b><h3>一种基于深度学习的表面缺陷检测方法及装置</h3><p>专利号：ZL202110123456.7</p><small>授权时间：2022-08-10　专利类型：发明专利</small></article><article><b>技术成果</b><h3>工业视觉缺陷检测系统 V2.0</h3><p>成果类型：软件著作权</p><small>登记号：2023SR1234567　登记时间：2023-06-20</small></article><article><b>图书 / 文章</b><h3>智能视觉检测技术在消费电子领域的应用研究报告</h3><p>发布时间：2023-12-01</p><small>发布单位：武汉智能感知科技有限公司</small></article></div></section>
             </section>
 
-            <section class="query-detail-page" data-query-panel="journal" aria-label="期刊详情">
+            <section class="query-detail-page" data-query-panel="journal" aria-label="文献详情">
               <section class="detail-hero journal-hero">
                 <div class="detail-title-block journal-title">
                   <h1>面向智能制造场景的工业视觉缺陷检测方法研究</h1>
@@ -233,7 +233,7 @@
                 <div class="journal-base-grid">
                   <dl><dt>论文ID</dt><dd>QKC20242024031500012876</dd><dt>万方ID</dt><dd>gxjs202403015</dd><dt>DOI</dt><dd>10.16656/j.issn.1673-4696.2024.0315</dd></dl>
                   <dl><dt>NID</dt><dd>ZGSY202403015</dd><dt>VID</dt><dd>7105689321</dd></dl>
-                  <dl class="journal-title-fields"><dt>英文标题</dt><dd>Research on Industrial Vision Defect Detection Methods for Intelligent Manufacturing Scenarios</dd><dt>中文标题</dt><dd>面向智能制造场景的工业视觉缺陷检测方法研究</dd><dt>来源期刊</dt><dd>智能制造与工业视觉</dd><dt>发表日期</dt><dd>2024-03-15</dd></dl>
+                  <dl class="journal-title-fields"><dt>英文标题</dt><dd>Research on Industrial Vision Defect Detection Methods for Intelligent Manufacturing Scenarios</dd><dt>中文标题</dt><dd>面向智能制造场景的工业视觉缺陷检测方法研究</dd><dt>来源文献</dt><dd>智能制造与工业视觉</dd><dt>发表日期</dt><dd>2024-03-15</dd></dl>
                   <dl><dt>发表年</dt><dd>2024</dd><dt>季度</dt><dd>第一季度</dd><dt>卷(期)</dt><dd>18(3)</dd></dl>
                   <dl><dt>页码</dt><dd>45-58</dd><dt>语种</dt><dd>中文</dd><dt>核心标识</dt><dd>北大核心 / CA</dd><dt>半年标识</dt><dd>1</dd></dl>
                 </div>
@@ -271,7 +271,7 @@
                 <h2>相关成果与延伸阅读</h2>
                 <div class="related-list journal-related">
                   <article><b>相关专利</b><h3>一种基于深度学习的工业表面缺陷检测方法及装置</h3><p>专利号：ZL202310456789.9</p><small>申请日：2023-05-12</small></article>
-                  <article><b>相关论文</b><h3>基于注意力机制的工业零件缺陷检测研究</h3><p>期刊：计算机集成制造系统</p><small>发表年：2023</small></article>
+                  <article><b>相关论文</b><h3>基于注意力机制的工业零件缺陷检测研究</h3><p>文献：计算机集成制造系统</p><small>发表年：2023</small></article>
                   <article><b>相关项目</b><h3>智能制造关键工艺视觉检测技术研发与示范</h3><p>项目来源：国家重点研发计划</p><small>立项年度：2023</small></article>
                   <article><b>延伸阅读</b><h3>工业视觉检测技术发展现状与趋势分析</h3><p>类型：行业研究报告</p><small>发布时间：2024-01-20</small></article>
                 </div>
@@ -291,7 +291,7 @@
               </div>
               <div class="query-keyword-row">
                 <img src="../../../assets/extracted/query_icon_search_big.png" alt="" />
-                <input placeholder="请输入关键词、机构名称、专利名称、期刊名称等" />
+                <input placeholder="请输入关键词、机构名称、专利名称、文献名称等" />
                 <button>搜索</button>
               </div>
             </section>

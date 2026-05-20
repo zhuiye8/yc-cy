@@ -56,3 +56,48 @@ export async function searchChainOrgs(params = {}) {
     items,
   }
 }
+
+function normalizeProvinceDistribution(payload = {}) {
+  const items = Array.isArray(payload.items) ? payload.items : []
+  return {
+    total: Number(payload.total || 0),
+    items: items.map((item) => ({
+      regionName: item.province || item.regionName || item.name || '',
+      value: Number(item.total || item.value || 0),
+      raw: item,
+    })).filter((item) => item.regionName),
+  }
+}
+
+function normalizeCityDistribution(payload = {}) {
+  const items = Array.isArray(payload.items) ? payload.items : []
+  return {
+    total: Number(payload.total || 0),
+    items: items.map((item) => ({
+      regionName: item.city || item.regionName || item.name || '',
+      value: Number(item.total || item.value || 0),
+      raw: item,
+    })).filter((item) => item.regionName),
+  }
+}
+
+async function tgJson(path) {
+  const response = await tgFetchWithAuth(path)
+  if (!response.ok) throw new Error(`ChainOrg API failed: HTTP ${response.status}`)
+
+  const payload = await response.json()
+  if (payload?.code !== '0' && payload?.code !== 0) {
+    throw new Error(payload?.message || 'ChainOrg API failed')
+  }
+  return payload?.data || {}
+}
+
+export async function fetchChainOrgProvinceDistribution(params = {}) {
+  const data = await tgJson(`/api/chain-orgs/province-distribution${buildQuery(params)}`)
+  return normalizeProvinceDistribution(data)
+}
+
+export async function fetchChainOrgCityDistribution(params = {}) {
+  const data = await tgJson(`/api/chain-orgs/city-distribution${buildQuery(params)}`)
+  return normalizeCityDistribution(data)
+}

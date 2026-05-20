@@ -53,17 +53,21 @@
               <span>A</span>
             </div>
             <div class="home-stats-copy">
-              <h2>数据总量 <span></span></h2>
+              <h2>数据维度 <span></span></h2>
               <strong>DATA</strong>
               <p>依托多源数据治理,打造服务决<br />策的智能情报平台</p>
             </div>
             <img class="home-stats-building" src="../../../assets/extracted/home_intro_photo.jpg" alt="研究院建筑" />
             <div class="home-metrics">
-              <div><span>文章</span><b>52345+</b></div>
-              <div><span>专利</span><b>52345+</b></div>
-              <div><span>机构</span><b>52345+</b></div>
-              <div><span>专家</span><b>52345+</b></div>
-              <div><span>标准</span><b>52345+</b></div>
+              <div><span>文章</span></div>
+              <div><span>专利</span></div>
+              <div><span>机构</span></div>
+              <div><span>专家</span></div>
+              <div><span>标准</span></div>
+              <div><span>文献</span></div>
+              <div><span>政策</span></div>
+              <div><span>项目</span></div>
+              <div><span>科技成果</span></div>
             </div>
           </section>
 

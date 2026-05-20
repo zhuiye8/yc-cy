@@ -11,7 +11,7 @@ export class ApiError extends Error {
 }
 
 function getBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL || ''
+  return import.meta.env.VITE_API_BASE_URL || '/api'
 }
 
 function joinUrl(baseUrl, path) {
